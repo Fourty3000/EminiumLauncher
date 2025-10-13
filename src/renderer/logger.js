@@ -9,22 +9,6 @@ if (typeof window !== 'undefined' && window.Logger && window.Logger.initialized)
   throw new Error('Logger already initialized');
 }
 
-// Create Logger object
-const Logger = {
-  initialized: false,
-  history: [],
-  config: {},
-  level: 0
-};
-
-// Mark as initializing
-Logger.initialized = true;
-
-// Export to window if available
-if (typeof window !== 'undefined') {
-  window.Logger = Logger;
-}
-
 const LOG_LEVELS = Object.freeze({
   DEBUG: 0,
   INFO: 1,
@@ -160,19 +144,19 @@ if (typeof window !== 'undefined') {
 
 // Export for different environments
 if (typeof globalThis !== 'undefined') {
-  globalThis.Logger = api;
+  globalThis.Logger = {
+    initialized: false,
+    ...api
+  };
 }
 
 if (typeof window !== 'undefined') {
-  window.Logger = api;
+  window.Logger = globalThis.Logger;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = api;
+  module.exports = globalThis.Logger;
 }
 
 // For backward compatibility
 Logger.initLogger = init;
-
-// Export the API
-Object.assign(Logger, api);

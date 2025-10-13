@@ -9,19 +9,6 @@ if (typeof window !== 'undefined' && window.ProgressUI && window.ProgressUI.init
   throw new Error('ProgressUI already initialized');
 }
 
-// Create ProgressUI object
-const ProgressUI = {
-  initialized: false
-};
-
-// Mark as initializing
-ProgressUI.initialized = true;
-
-// Export to window if available
-if (typeof window !== 'undefined') {
-  window.ProgressUI = ProgressUI;
-}
-
 // Progress state
 let _progressState;
 if (typeof globalThis !== 'undefined' && !globalThis._progressState) {
@@ -390,7 +377,8 @@ function initProgressUI() {
 }
 
 // Export progress UI
-const _ProgressUI = {
+const ProgressUI = {
+  initialized: false,
   open,
   close,
   set,
@@ -409,10 +397,10 @@ const _ProgressUI = {
 
 // Store in globalThis to persist across reloads
 if (typeof globalThis !== 'undefined' && !globalThis.ProgressUI) {
-  globalThis.ProgressUI = _ProgressUI;
+  globalThis.ProgressUI = ProgressUI;
 }
 
 // Also expose to window for backward compatibility
 if (typeof window !== 'undefined') {
-  window.ProgressUI = _ProgressUI;
+  window.ProgressUI = ProgressUI;
 }

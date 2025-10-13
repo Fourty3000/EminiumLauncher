@@ -9,19 +9,6 @@ if (typeof window !== 'undefined' && window.UpdaterManager && window.UpdaterMana
   throw new Error('UpdaterManager already initialized');
 }
 
-// Create UpdaterManager object
-const UpdaterManager = {
-  initialized: false
-};
-
-// Mark as initializing
-UpdaterManager.initialized = true;
-
-// Export to window if available
-if (typeof window !== 'undefined') {
-  window.UpdaterManager = UpdaterManager;
-}
-
 // Initialize or get existing updater state
 let _updaterState;
 if (typeof globalThis !== 'undefined' && !globalThis._updaterState) {
@@ -602,12 +589,33 @@ let _updateCheckInterval = null;
 
 // Initialize on load
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    UpdaterManager.initUpdaterManager();
-  });
+  document.addEventListener('DOMContentLoaded', initUpdaterManager);
 } else {
-  UpdaterManager.initUpdaterManager();
+  initUpdaterManager();
 }
+
+// Export updater manager
+const UpdaterManager = {
+  initialized: false,
+  initUpdaterManager,
+  checkForUpdates,
+  downloadUpdate,
+  applyUpdate,
+  showUpdateNotification,
+  handleUpdateError,
+  startPeriodicChecks,
+  stopPeriodicChecks,
+  updateUpdateUI,
+  formatBytes,
+  loadUpdateHistory,
+  addToUpdateHistory,
+  getUpdateHistory,
+  checkForUpdatesManual,
+  cancelUpdate,
+  retryUpdate,
+  forceUpdate,
+  getUpdaterState: () => ({ ..._updaterState })
+};
 
 // Export to window if in browser environment
 if (typeof window !== 'undefined') {

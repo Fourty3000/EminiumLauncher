@@ -9,19 +9,6 @@ if (typeof window !== 'undefined' && window.App && window.App.initialized) {
   throw new Error('App already initialized');
 }
 
-// Create App object
-const App = {
-  initialized: false
-};
-
-// Mark as initializing
-App.initialized = true;
-
-// Export to window if available
-if (typeof window !== 'undefined') {
-  window.App = App;
-}
-
 // Application state - ensure it's only declared once
 let _appState;
 if (typeof globalThis !== 'undefined' && !globalThis._appState) {
@@ -620,15 +607,18 @@ document.addEventListener('visibilitychange', handleVisibilityChange);
 window.addEventListener('beforeunload', handleUnload);
 
 // Export app functions for debugging
-App.initializeApp = initializeApp;
-App.pingOnce = pingOnce;
-App.startPing = startPing;
-App.setReadyUI = setReadyUI;
-App.checkAndAutoPrepare = checkAndAutoPrepare;
-App.launchGame = launchGame;
-App.runUpdaterIfNeeded = runUpdaterIfNeeded;
-App.forceCloseAllProgress = forceCloseAllProgress;
-App.getState = () => ({ ..._appState });
+const App = {
+  initialized: false,
+  initializeApp,
+  pingOnce,
+  startPing,
+  setReadyUI,
+  checkAndAutoPrepare,
+  launchGame,
+  runUpdaterIfNeeded,
+  forceCloseAllProgress,
+  getState: () => ({ ..._appState })
+};
 
 // Export to window for backward compatibility
 if (typeof window !== 'undefined') {

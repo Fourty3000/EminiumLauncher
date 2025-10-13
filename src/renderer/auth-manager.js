@@ -368,14 +368,24 @@ function updateUIAfterLogin(profile) {
   const authTab = document.getElementById('navAuth');
   if (authTab) authTab.style.display = 'none';
 
-  // Switch to play section
+  // Switch to play section using CSS classes
   const authSection = document.getElementById('authSection');
   const playSection = document.getElementById('playSection');
   const logsSection = document.getElementById('logsSection');
 
-  if (authSection) authSection.style.display = 'none';
-  if (playSection) playSection.style.display = 'block';
-  if (logsSection) logsSection.style.display = 'none';
+  // Remove active class from auth section and add to play section
+  if (authSection) {
+    authSection.classList.remove('active');
+    authSection.style.display = 'none';
+  }
+  if (playSection) {
+    playSection.classList.add('active');
+    playSection.style.display = 'block';
+  }
+  if (logsSection) {
+    logsSection.classList.remove('active');
+    logsSection.style.display = 'none';
+  }
 
   // Update navigation active state
   const navItems = document.querySelectorAll('.nav-item');
@@ -455,10 +465,6 @@ async function performLogin(email, pass, code2fa, options = {}) {
       
       // Mettre à jour l'interface utilisateur
       updateUIAfterLogin(result.profile);
-      
-      // Basculer vers l'onglet de jeu
-      window.DOMUtils.toggle('authSection', 'none');
-      window.DOMUtils.toggle('playSection', 'block');
       
       if (onSuccess) onSuccess(result.profile);
       return result.profile;
@@ -743,14 +749,24 @@ function resetUIAfterLogout() {
   const authTab = document.getElementById('navAuth');
   if (authTab) authTab.style.display = 'flex';
 
-  // Switch to auth section
+  // Switch to auth section using CSS classes
   const authSection = document.getElementById('authSection');
   const playSection = document.getElementById('playSection');
   const logsSection = document.getElementById('logsSection');
 
-  if (authSection) authSection.style.display = 'block';
-  if (playSection) playSection.style.display = 'none';
-  if (logsSection) logsSection.style.display = 'none';
+  // Remove active class from play section and add to auth section
+  if (authSection) {
+    authSection.classList.add('active');
+    authSection.style.display = 'block';
+  }
+  if (playSection) {
+    playSection.classList.remove('active');
+    playSection.style.display = 'none';
+  }
+  if (logsSection) {
+    logsSection.classList.remove('active');
+    logsSection.style.display = 'none';
+  }
 
   // Update navigation active state
   const navItems = document.querySelectorAll('.nav-item');
@@ -889,17 +905,28 @@ function getAuthState() {
   };
 }
 
-// Debug function to check current state
-function debugAuthState() {
-  console.log('[Auth Debug] Current state:', {
-    isAuthenticated: authState.isAuthenticated,
-    hasProfile: !!authState.userProfile,
-    hasToken: !!authState.accessToken,
-    profile: authState.userProfile ? {
-      username: authState.userProfile.username,
-      grade: authState.userProfile.grade
-    } : null
-  });
+// Test function to verify navigation works correctly
+function testNavigationSwitch() {
+  console.log('[Auth Test] Testing navigation switch...');
+
+  // Test switching to play section
+  const authSection = document.getElementById('authSection');
+  const playSection = document.getElementById('playSection');
+
+  if (authSection && playSection) {
+    // Simulate what happens after login
+    authSection.classList.remove('active');
+    authSection.style.display = 'none';
+    playSection.classList.add('active');
+    playSection.style.display = 'block';
+
+    console.log('[Auth Test] Navigation test completed');
+    console.log('[Auth Test] Auth section hidden:', authSection.style.display === 'none');
+    console.log('[Auth Test] Play section visible:', playSection.style.display === 'block');
+    console.log('[Auth Test] Play section has active class:', playSection.classList.contains('active'));
+  } else {
+    console.error('[Auth Test] Could not find sections to test');
+  }
 }
 
 // Export authentication manager
@@ -918,7 +945,8 @@ const AuthManager = {
   mapLoginError,
   setAuthError,
   testConnection,
-  showConnectionStatus
+  showConnectionStatus,
+  testNavigationSwitch
 };
 
 // Store in globalThis to persist across reloads

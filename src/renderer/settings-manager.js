@@ -9,19 +9,6 @@ if (typeof window !== 'undefined' && window.SettingsManager && window.SettingsMa
   throw new Error('SettingsManager already initialized');
 }
 
-// Create SettingsManager object
-const SettingsManager = {
-  initialized: false
-};
-
-// Mark as initializing
-SettingsManager.initialized = true;
-
-// Export to window if available
-if (typeof window !== 'undefined') {
-  window.SettingsManager = SettingsManager;
-}
-
 // Settings state
 let _settingsState;
 if (typeof globalThis !== 'undefined' && !globalThis._settingsState) {
@@ -322,10 +309,25 @@ async function initSettingsManager() {
 
 // Store in globalThis to persist across reloads
 if (typeof globalThis !== 'undefined' && !globalThis.SettingsManager) {
-  globalThis.SettingsManager = SettingsManager;
+  globalThis.SettingsManager = {
+    initialized: false,
+    loadSettings,
+    saveSettings,
+    readCurrentSettings,
+    applySettings,
+    settingsDebouncedSave,
+    updateMemLabel,
+    updateRenderLabel,
+    warnIfTooHigh,
+    syncFPS,
+    detectSystemRAM,
+    initSettingsListeners,
+    refreshPlayOptionsUI,
+    initSettingsManager
+  };
 }
 
 // Also expose to window for backward compatibility
 if (typeof window !== 'undefined') {
-  window.SettingsManager = SettingsManager;
+  window.SettingsManager = globalThis.SettingsManager;
 }

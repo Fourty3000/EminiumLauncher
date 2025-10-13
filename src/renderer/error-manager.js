@@ -9,33 +9,6 @@ if (typeof window !== 'undefined' && window.ErrorManager && window.ErrorManager.
   throw new Error('ErrorManager already initialized');
 }
 
-// Create ErrorManager object
-const ErrorManager = {
-  initialized: false
-};
-
-// Mark as initializing
-ErrorManager.initialized = true;
-
-// Export to window if available
-if (typeof window !== 'undefined') {
-  window.ErrorManager = ErrorManager;
-}
-const ErrorTypes = {
-  NETWORK: 'network',
-  AUTH: 'auth',
-  FILESYSTEM: 'filesystem',
-  UPDATE: 'update',
-  GAME_LAUNCH: 'game_launch',
-  SETTINGS: 'settings',
-  UNKNOWN: 'unknown'
-};
-
-// Store ErrorTypes in globalThis if not already there
-if (!globalThis.ErrorTypes) {
-  globalThis.ErrorTypes = ErrorTypes;
-}
-
 // Error severity levels
 const ErrorSeverity = {
   LOW: 'low',
@@ -957,25 +930,14 @@ function clearErrorHistory() {
 }
 
 // Export error manager
-if (!globalThis.ErrorManager) {
-  globalThis.ErrorManager = {
-    handleError,
-    retryLastAction,
-    showErrorDetails,
-    copyErrorDetails,
-    getErrorStats,
-    clearErrorHistory,
-    ErrorTypes,
-    ErrorSeverity
-  };
-}
-
-// Also expose to window for backward compatibility
-if (typeof window !== 'undefined' && !window.ErrorManager) {
-  window.ErrorManager = globalThis.ErrorManager;
-}
-
-// Export for CommonJS
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = globalThis.ErrorManager;
-}
+const ErrorManager = {
+  initialized: false,
+  handleError,
+  retryLastAction,
+  showErrorDetails,
+  copyErrorDetails,
+  getErrorStats,
+  clearErrorHistory,
+  ErrorTypes,
+  ErrorSeverity
+};
