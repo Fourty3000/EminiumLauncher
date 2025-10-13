@@ -67,7 +67,7 @@ function initProgressElements() {
 // Open progress modal
 function open(title = 'Progression') {
   if (!_progressElements.modal) initProgressElements();
-  
+
   _progressState.open = true;
   _progressState.title = title;
   _progressState.percent = 0;
@@ -76,7 +76,7 @@ function open(title = 'Progression') {
   _progressState.startTime = Date.now();
   _progressState.bytesDownloaded = 0;
   _progressState.lastBytesTime = null;
-  
+
   if (_progressElements.modal) {
     _progressElements.modal.style.display = 'flex';
   }
@@ -86,13 +86,13 @@ function open(title = 'Progression') {
   if (_progressElements.log) {
     _progressElements.log.innerHTML = '';
   }
-  
+
   // Initially disable buttons, show close button
   setButtonsEnabled(false);
   if (_progressElements.close) {
     _progressElements.close.style.display = 'inline-block';
   }
-  
+
   updateProgressDisplay();
 }
 
@@ -128,9 +128,9 @@ function addLine(line, cls = '') {
     class: cls,
     timestamp: timestamp
   };
-  
+
   _progressState.lines.push(lineEntry);
-  
+
   if (_progressElements.log) {
     const div = document.createElement('div');
     div.className = `log-entry ${cls}`;
@@ -175,13 +175,13 @@ function calculateSpeed(bytesDownloaded) {
     _progressState.bytesDownloaded = bytesDownloaded;
     return 0;
   }
-  
+
   const timeDiff = (now - _progressState.lastBytesTime) / 1000; // seconds
   const bytesDiff = bytesDownloaded - _progressState.bytesDownloaded;
-  
+
   _progressState.lastBytesTime = now;
   _progressState.bytesDownloaded = bytesDownloaded;
-  
+
   if (timeDiff > 0) {
     return Math.round(bytesDiff / timeDiff); // bytes per second
   }
@@ -191,11 +191,11 @@ function calculateSpeed(bytesDownloaded) {
 // Calculate ETA
 function calculateETA(percent, totalBytes) {
   if (percent <= 0 || percent >= 100) return null;
-  
+
   const elapsed = Date.now() - _progressState.startTime;
   const total = (elapsed * 100) / percent;
   const remaining = total - elapsed;
-  
+
   if (remaining > 0) {
     return Math.round(remaining / 1000); // seconds
   }
@@ -205,17 +205,17 @@ function calculateETA(percent, totalBytes) {
 // Update progress display
 function updateProgressDisplay() {
   if (!_progressElements.modal) return;
-  
+
   // Update percentage
   if (_progressElements.percent) {
     _progressElements.percent.textContent = `${Math.round(_progressState.percent)}%`;
   }
-  
+
   // Update progress bar
   if (_progressElements.bar) {
     _progressElements.bar.style.width = `${_progressState.percent}%`;
   }
-  
+
   // Update phases
   const phasesContainer = document.querySelector('.progress-phases');
   if (phasesContainer) {
@@ -235,100 +235,100 @@ const progressLogger = {
   info: function(message) {
     addLine(message, 'info');
   },
-  
+
   success: function(message) {
     addLine(message, 'success');
   },
-  
+
   warning: function(message) {
     addLine(message, 'warning');
   },
-  
+
   error: function(message) {
     addLine(message, 'error');
   },
-  
+
   debug: function(message) {
     addLine(message, 'debug');
   },
-  
+
   highlight: function(message) {
     addLine(message, 'highlight');
   },
-  
+
   // Log file operations
   fileStart: function(filename) {
     addLine(`Téléchargement de ${filename}...`, 'file-start');
   },
-  
+
   fileComplete: function(filename, size = null) {
     const sizeText = size ? ` (${formatBytes(size)})` : '';
     addLine(`${filename} terminé${sizeText}`, 'file-complete');
   },
-  
+
   fileError: function(filename, error) {
     addLine(`Erreur pour ${filename}: ${error}`, 'file-error');
   },
-  
+
   // Log download progress
   downloadStart: function(url, filename) {
     addLine(`Début du téléchargement: ${filename}`, 'download-start');
   },
-  
+
   downloadProgress: function(filename, percent, speed) {
     const speedText = speed ? ` - ${formatBytes(speed)}/s` : '';
     addLine(`${filename}: ${Math.round(percent)}%${speedText}`, 'download-progress');
   },
-  
+
   downloadComplete: function(filename, totalSize) {
     addLine(`Téléchargement terminé: ${filename} (${formatBytes(totalSize)})`, 'download-complete');
   },
-  
+
   // Log installation steps
   installStart: function(component) {
     addLine(`Installation de ${component}...`, 'install-start');
   },
-  
+
   installProgress: function(component, step, total) {
     addLine(`${component}: ${step}/${total}`, 'install-progress');
   },
-  
+
   installComplete: function(component) {
     addLine(`Installation terminée: ${component}`, 'install-complete');
   },
-  
+
   // Log verification steps
   verifyStart: function(target) {
     addLine(`Vérification de ${target}...`, 'verify-start');
   },
-  
+
   verifyProgress: function(current, total) {
     addLine(`Vérification: ${current}/${total}`, 'verify-progress');
   },
-  
+
   verifyComplete: function(target) {
     addLine(`Vérification terminée: ${target}`, 'verify-complete');
   },
-  
+
   // Log system operations
   systemInfo: function(info) {
     addLine(`Système: ${info}`, 'system-info');
   },
-  
+
   systemWarning: function(warning) {
     addLine(`Attention système: ${warning}`, 'system-warning');
   },
-  
+
   // Log milestones
   milestone: function(message) {
     addLine(`🎯 ${message}`, 'milestone');
   },
-  
+
   // Log completion
   complete: function(message) {
     addLine(`✅ ${message}`, 'complete');
   },
-  
+
   // Log errors with details
   errorDetails: function(error, context = '') {
     const contextText = context ? ` (${context})` : '';
@@ -339,13 +339,13 @@ const progressLogger = {
 // Format bytes to human readable format
 function formatBytes(bytes, decimals = 2) {
   if (bytes === 0) return '0 Bytes';
-  
+
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-  
+
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
@@ -354,7 +354,7 @@ function initProgressListeners() {
   if (_progressElements.close) {
     _progressElements.close.addEventListener('click', close);
   }
-  
+
   if (_progressElements.background) {
     _progressElements.background.addEventListener('click', () => {
       // Minimize to background/tray

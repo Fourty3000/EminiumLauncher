@@ -32,6 +32,7 @@ if (typeof globalThis !== 'undefined' && !globalThis._appState) {
     lastUp: undefined
   };
 }
+
 async function initializeApp() {
   try {
     // Initialize logger first thing
@@ -55,7 +56,7 @@ async function initializeApp() {
     // Initialize authentication manager FIRST - this will check if user is already logged in
     if (window.AuthManager) {
       console.log('[App] Checking authentication status...');
-      await window.AuthManager.initAuthManager();
+      window.AuthManager.initAuthManager();
 
       // Get authentication status after initialization
       _appState.authenticated = await window.AuthManager.checkAuthStatus();
@@ -371,12 +372,12 @@ async function pingOnce() {
   try {
     const result = await window.eminium.ping('play.eminium.ovh', 25565, 3000);
     const up = result?.up || false;
-    
+
     if (up !== _appState.lastUp) {
       _appState.lastUp = up;
       setReadyUI(_appState.ready);
     }
-    
+
     return up;
   } catch (error) {
     window.ErrorManager.handleError(error, 'ping');
@@ -388,7 +389,7 @@ function startPing() {
   if (_appState.pingTimer) {
     clearInterval(_appState.pingTimer);
   }
-  
+
   _appState.pingTimer = setInterval(pingOnce, 5000);
   pingOnce(); // Initial ping
 }
@@ -433,9 +434,9 @@ async function checkAndAutoPrepare() {
     window.ProgressUI.open('Préparation');
     window.ProgressUI.set(5);
     window.Logger.info('Vérification des fichiers...');
-    
+
     const res = await window.eminium.ensure();
-    
+
     if (res?.ok) {
       window.Logger.success('Fichiers prêts ✓');
       setReadyUI(true);
@@ -520,15 +521,15 @@ async function launchGame() {
 // Run updater if needed
 async function runUpdaterIfNeeded() {
   if (!window.UpdaterManager) return false;
-  
+
   try {
     // Check for updates silently
     const result = await window.UpdaterManager.checkForUpdates(false);
-    
+
     // If update is available, ask user if they want to install
     if (result?.ok && window.UpdaterManager.getUpdaterState().updateAvailable) {
       const state = window.UpdaterManager.getUpdaterState();
-      
+
       // Show update notification and ask user
       if (confirm(`Une nouvelle version ${state.latestVersion} est disponible. Voulez-vous l'installer maintenant?`)) {
         await window.UpdaterManager.installUpdateManual();
@@ -538,7 +539,7 @@ async function runUpdaterIfNeeded() {
   } catch (error) {
     window.ErrorManager.handleError(error, 'update');
   }
-  
+
   return false;
 }
 

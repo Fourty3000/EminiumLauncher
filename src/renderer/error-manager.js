@@ -9,6 +9,22 @@ if (typeof window !== 'undefined' && window.ErrorManager && window.ErrorManager.
   throw new Error('ErrorManager already initialized');
 }
 
+// Error types enumeration
+const ErrorTypes = {
+  NETWORK: 'network',
+  AUTH: 'auth',
+  FILESYSTEM: 'filesystem',
+  UPDATE: 'update',
+  GAME_LAUNCH: 'game_launch',
+  SETTINGS: 'settings',
+  UNKNOWN: 'unknown'
+};
+
+// Store ErrorTypes in globalThis if not already there
+if (!globalThis.ErrorTypes) {
+  globalThis.ErrorTypes = ErrorTypes;
+}
+
 // Error severity levels
 const ErrorSeverity = {
   LOW: 'low',
@@ -126,65 +142,65 @@ const ErrorSolutions = {
 function categorizeError(error) {
   const errorMessage = error?.message?.toLowerCase() || error?.toLowerCase() || '';
   const errorType = error?.type?.toLowerCase() || '';
-  
-  if (errorMessage.includes('network') || errorMessage.includes('connection') || 
+
+  if (errorMessage.includes('network') || errorMessage.includes('connection') ||
       errorMessage.includes('timeout') || errorMessage.includes('ping') ||
       errorType.includes('network')) {
     return ErrorTypes.NETWORK;
   }
-  
-  if (errorMessage.includes('auth') || errorMessage.includes('login') || 
+
+  if (errorMessage.includes('auth') || errorMessage.includes('login') ||
       errorMessage.includes('credential') || errorMessage.includes('token') ||
       errorType.includes('auth')) {
     return ErrorTypes.AUTH;
   }
-  
-  if (errorMessage.includes('file') || errorMessage.includes('filesystem') || 
+
+  if (errorMessage.includes('file') || errorMessage.includes('filesystem') ||
       errorMessage.includes('permission') || errorMessage.includes('access') ||
       errorType.includes('filesystem')) {
     return ErrorTypes.FILESYSTEM;
   }
-  
-  if (errorMessage.includes('update') || errorMessage.includes('download') || 
+
+  if (errorMessage.includes('update') || errorMessage.includes('download') ||
       errorMessage.includes('install') || errorType.includes('update')) {
     return ErrorTypes.UPDATE;
   }
-  
-  if (errorMessage.includes('launch') || errorMessage.includes('minecraft') || 
+
+  if (errorMessage.includes('launch') || errorMessage.includes('minecraft') ||
       errorMessage.includes('game') || errorType.includes('game')) {
     return ErrorTypes.GAME_LAUNCH;
   }
-  
-  if (errorMessage.includes('setting') || errorMessage.includes('config') || 
+
+  if (errorMessage.includes('setting') || errorMessage.includes('config') ||
       errorType.includes('setting')) {
     return ErrorTypes.SETTINGS;
   }
-  
+
   return ErrorTypes.UNKNOWN;
 }
 
 // Determine error severity
 function determineSeverity(error, errorType) {
   const errorMessage = error?.message?.toLowerCase() || '';
-  
+
   // Critical errors
-  if (errorMessage.includes('critical') || errorMessage.includes('fatal') || 
+  if (errorMessage.includes('critical') || errorMessage.includes('fatal') ||
       errorMessage.includes('corrupt') || errorMessage.includes('permission denied')) {
     return ErrorSeverity.CRITICAL;
   }
-  
+
   // High severity errors
-  if (errorMessage.includes('failed') || errorMessage.includes('error') || 
+  if (errorMessage.includes('failed') || errorMessage.includes('error') ||
       errorMessage.includes('exception') || errorMessage.includes('timeout')) {
     return ErrorSeverity.HIGH;
   }
-  
+
   // Medium severity errors
-  if (errorMessage.includes('warning') || errorMessage.includes('warn') || 
+  if (errorMessage.includes('warning') || errorMessage.includes('warn') ||
       errorMessage.includes('retry')) {
     return ErrorSeverity.MEDIUM;
   }
-  
+
   // Default to low severity
   return ErrorSeverity.LOW;
 }
@@ -193,7 +209,7 @@ function determineSeverity(error, errorType) {
 function createErrorNotification(error, errorType, severity) {
   const notification = document.createElement('div');
   notification.className = `error-notification error-${severity}`;
-  
+
   // Get appropriate icon and color for severity
   const getSeverityConfig = (severity) => {
     switch (severity) {
@@ -233,7 +249,7 @@ function createErrorNotification(error, errorType, severity) {
   const message = ErrorMessages[errorType][severity];
   const solutions = ErrorSolutions[errorType];
   const severityConfig = getSeverityConfig(severity);
-  
+
   notification.innerHTML = `
     <div class="error-header">
       <div class="error-icon">
@@ -269,7 +285,7 @@ function createErrorNotification(error, errorType, severity) {
       <button class="error-btn error-btn-primary" onclick="ErrorManager.retryLastAction()">Réessayer</button>
     </div>
   `;
-  
+
   // Enhanced CSS styles for the new notification design
   const enhancedStyles = `
     /* Error Notification Styles */
@@ -545,9 +561,9 @@ function createErrorNotification(error, errorType, severity) {
     styleElement.textContent = enhancedStyles;
     document.head.appendChild(styleElement);
   }
-  
+
   document.body.appendChild(notification);
-  
+
   // Auto-remove after 10 seconds for low/medium, 15 for high/critical
   const autoRemoveTime = severity === ErrorSeverity.LOW || severity === ErrorSeverity.MEDIUM ? 10000 : 15000;
   setTimeout(() => {
@@ -560,7 +576,7 @@ function createErrorNotification(error, errorType, severity) {
       }, 300);
     }
   }, autoRemoveTime);
-  
+
   return notification;
 }
 
@@ -762,7 +778,7 @@ function handleError(error, context = '') {
     const errorType = categorizeError(error);
     const severity = determineSeverity(error, errorType);
     const timestamp = new Date().toISOString();
-    
+
     // Create error object
     const errorObj = {
       id: Date.now() + Math.random(),
@@ -773,29 +789,29 @@ function handleError(error, context = '') {
       timestamp: timestamp,
       stack: error?.stack || null
     };
-    
+
     // Update error state
     _errorState.currentError = errorObj;
     _errorState.errorHistory.push(errorObj);
     _errorState.errorCount++;
     _errorState.lastErrorTime = timestamp;
-    
+
     // Keep only last 50 errors in history
     if (_errorState.errorHistory.length > 50) {
       _errorState.errorHistory = _errorState.errorHistory.slice(-50);
     }
-    
+
     // Log error
     console.error(`[${errorType.toUpperCase()}] ${context}:`, error);
-    
+
     // Show user-friendly notification
     createErrorNotification(error, errorType, severity);
-    
+
     // Log to external service if available
     if (window.Logger) {
       window.Logger.error(`[${errorType.toUpperCase()}] ${context}: ${errorObj.message}`);
     }
-    
+
     return errorObj;
   } catch (handlingError) {
     console.error('Error in error handler:', handlingError);
@@ -808,12 +824,12 @@ function handleError(error, context = '') {
 function retryLastAction() {
   if (_errorState.currentError) {
     const { context } = _errorState.currentError;
-    
+
     // Remove all error notifications
     document.querySelectorAll('.error-notification').forEach(notification => {
       notification.remove();
     });
-    
+
     // Retry based on context
     switch (context) {
       case 'auto-start':
@@ -845,7 +861,7 @@ function retryLastAction() {
 // Show error details modal
 function showErrorDetails() {
   if (!_errorState.currentError) return;
-  
+
   const modal = document.createElement('div');
   modal.className = 'error-details-modal';
   modal.innerHTML = `
@@ -880,14 +896,14 @@ function showErrorDetails() {
       </div>
     </div>
   `;
-  
+
   document.body.appendChild(modal);
 }
 
 // Copy error details to clipboard
 function copyErrorDetails() {
   if (!_errorState.currentError) return;
-  
+
   const details = `
 Type: ${_errorState.currentError.type}
 Severity: ${_errorState.currentError.severity}
@@ -896,7 +912,7 @@ Timestamp: ${new Date(_errorState.currentError.timestamp).toLocaleString()}
 Message: ${_errorState.currentError.message}
 ${_errorState.currentError.stack ? `Stack: ${_errorState.currentError.stack}` : ''}
   `.trim();
-  
+
   navigator.clipboard.writeText(details).then(() => {
     alert('Détails de l\'erreur copiés dans le presse-papiers');
   }).catch(() => {
@@ -912,12 +928,12 @@ function getErrorStats() {
     errorsBySeverity: {},
     recentErrors: _errorState.errorHistory.slice(-10)
   };
-  
+
   _errorState.errorHistory.forEach(error => {
     stats.errorsByType[error.type] = (stats.errorsByType[error.type] || 0) + 1;
     stats.errorsBySeverity[error.severity] = (stats.errorsBySeverity[error.severity] || 0) + 1;
   });
-  
+
   return stats;
 }
 
@@ -941,3 +957,18 @@ const ErrorManager = {
   ErrorTypes,
   ErrorSeverity
 };
+
+// Store in globalThis to persist across reloads
+if (!globalThis.ErrorManager) {
+  globalThis.ErrorManager = ErrorManager;
+}
+
+// Also expose to window for backward compatibility
+if (typeof window !== 'undefined') {
+  window.ErrorManager = ErrorManager;
+}
+
+// Export for CommonJS
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = ErrorManager;
+}

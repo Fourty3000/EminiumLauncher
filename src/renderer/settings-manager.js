@@ -102,24 +102,24 @@ function readCurrentSettings() {
 // Apply settings to UI
 function applySettings(settings) {
   if (!settings || typeof settings !== 'object') return;
-  
+
   if (typeof settings.memMB === 'number' && _settingsElements.memSlider) {
     _settingsElements.memSlider.value = String(settings.memMB);
     updateMemLabel();
   }
-  
+
   if (typeof settings.renderDist === 'number' && _settingsElements.render) {
     _settingsElements.render.value = String(settings.renderDist);
     updateRenderLabel();
   }
-  
+
   if (typeof settings.fpsCap === 'number' && _settingsElements.fps) {
     _settingsElements.fps.value = String(settings.fpsCap);
     if (!_settingsElements.fpsUnlimited?.classList.contains('active')) {
       _settingsElements.fpsLabel.textContent = String(settings.fpsCap);
     }
   }
-  
+
   if (typeof settings.vsync === 'boolean' && _settingsElements.vsync) {
     if (settings.vsync && !_settingsElements.vsync.classList.contains('active')) {
       _settingsElements.vsync.classList.add('active');
@@ -127,7 +127,7 @@ function applySettings(settings) {
       _settingsElements.vsync.classList.remove('active');
     }
   }
-  
+
   if (typeof settings.fpsUnlimited === 'boolean' && _settingsElements.fpsUnlimited) {
     if (settings.fpsUnlimited && !_settingsElements.fpsUnlimited.classList.contains('active')) {
       _settingsElements.fpsUnlimited.classList.add('active');
@@ -135,7 +135,7 @@ function applySettings(settings) {
       _settingsElements.fpsUnlimited.classList.remove('active');
     }
   }
-  
+
   syncFPS();
   warnIfTooHigh(_settingsState.settings.detectedRamMB);
 }
@@ -146,7 +146,7 @@ function settingsDebouncedSave() {
   if (_settingsState.settings.saveTimer) {
     clearTimeout(_settingsState.settings.saveTimer);
   }
-  
+
   // Set new timer with reduced delay for better responsiveness
   _settingsState.settings.saveTimer = setTimeout(async () => {
     try {
@@ -176,10 +176,10 @@ function updateRenderLabel() {
 // Warn if memory allocation is too high
 function warnIfTooHigh(totalMB) {
   if (!_settingsElements.ramInfo || !_settingsElements.memSlider) return;
-  
+
   const selected = parseInt(_settingsElements.memSlider.value, 10) || 2048;
   if (!totalMB) return;
-  
+
   const seventy = Math.floor(totalMB * 0.7);
   if (selected > seventy) {
     _settingsElements.ramInfo.innerHTML = `RAM système: ${Math.round(totalMB / 1024)} Go — <span style="color:#fca5a5;">Attention:</span> vous allouez plus de 70% de la RAM.`;
@@ -191,10 +191,10 @@ function warnIfTooHigh(totalMB) {
 // Sync FPS controls
 function syncFPS() {
   if (!_settingsElements.fps || !_settingsElements.fpsLabel || !_settingsElements.fpsUnlimited) return;
-  
+
   const unlimited = _settingsElements.fpsUnlimited.classList.contains('active');
   _settingsElements.fps.disabled = unlimited;
-  
+
   if (unlimited) {
     _settingsElements.fpsLabel.textContent = 'Illimité';
     _settingsElements.fps.classList.add('dim');
@@ -208,25 +208,25 @@ function syncFPS() {
 // Detect system RAM and configure slider
 async function detectSystemRAM() {
   if (!_settingsElements.memSlider || !_settingsElements.ramInfo) return;
-  
+
   try {
     const info = await (window.eminium?.getSystemRamMB ? window.eminium.getSystemRamMB() : Promise.resolve({ ok: true, totalMB: 8192 }));
     const total = info?.totalMB || 8192;
     _settingsState.settings.detectedRamMB = total;
-    
+
     // Set max to 85% of total RAM (rounded to nearest 256MB)
     const maxAlloc = Math.max(1024, Math.floor((total * 0.85) / 256) * 256);
     _settingsElements.memSlider.max = String(maxAlloc);
-    
+
     // Adjust current value if it exceeds max
     if (parseInt(_settingsElements.memSlider.value, 10) > maxAlloc) {
       _settingsElements.memSlider.value = String(Math.min(maxAlloc, 4096));
     }
-    
+
     updateMemLabel();
     warnIfTooHigh(total);
     _settingsElements.ramInfo.title = `Total détecté: ${total} Mo`;
-    
+
   } catch (error) {
     console.warn('Error detecting system RAM:', error);
     _settingsState.settings.detectedRamMB = null;
@@ -238,14 +238,14 @@ async function detectSystemRAM() {
 // Initialize settings event listeners
 function initSettingsListeners() {
   if (!_settingsElements.memSlider) return;
-  
+
   // Memory slider
   _settingsElements.memSlider.addEventListener('input', () => {
     updateMemLabel();
     warnIfTooHigh(_settingsState.settings.detectedRamMB);
     settingsDebouncedSave();
   });
-  
+
   // Render distance
   if (_settingsElements.render) {
     _settingsElements.render.addEventListener('input', () => {
@@ -253,7 +253,7 @@ function initSettingsListeners() {
     });
     _settingsElements.render.addEventListener('change', settingsDebouncedSave);
   }
-  
+
   // FPS cap
   if (_settingsElements.fps) {
     _settingsElements.fps.addEventListener('input', () => {
@@ -263,7 +263,7 @@ function initSettingsListeners() {
     });
     _settingsElements.fps.addEventListener('change', settingsDebouncedSave);
   }
-  
+
   // FPS unlimited toggle
   if (_settingsElements.fpsUnlimited) {
     _settingsElements.fpsUnlimited.addEventListener('change', () => {
@@ -271,7 +271,7 @@ function initSettingsListeners() {
       settingsDebouncedSave();
     });
   }
-  
+
   // VSync toggle
   if (_settingsElements.vsync) {
     _settingsElements.vsync.addEventListener('change', settingsDebouncedSave);
@@ -292,14 +292,14 @@ async function initSettingsManager() {
   if (_settingsState.initialized) {
     return;
   }
-  
+
   try {
     initSettingsElements();
     await detectSystemRAM();
     await loadSettings();
     initSettingsListeners();
     refreshPlayOptionsUI();
-    
+
     _settingsState.initialized = true;
     console.log('[Settings] Settings manager initialized successfully');
   } catch (error) {

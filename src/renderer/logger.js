@@ -9,7 +9,7 @@ if (typeof window !== 'undefined' && window.Logger && window.Logger.initialized)
   throw new Error('Logger already initialized');
 }
 
-const LOG_LEVELS = Object.freeze({
+const LOG_LEVELS = globalThis.LOG_LEVELS || Object.freeze({
   DEBUG: 0,
   INFO: 1,
   WARN: 2,
@@ -18,7 +18,7 @@ const LOG_LEVELS = Object.freeze({
 });
 
 // Default configuration
-const LOGGER_CONFIG = Object.freeze({
+const LOGGER_CONFIG = globalThis.LOGGER_CONFIG || Object.freeze({
   maxHistory: 1000,
   defaultLevel: LOG_LEVELS.INFO,
   showTimestamp: true,
@@ -31,6 +31,14 @@ const LOGGER_CONFIG = Object.freeze({
     [LOG_LEVELS.SUCCESS]: '#2ecc71'
   }
 });
+
+// Store in globalThis to persist across reloads
+if (!globalThis.LOG_LEVELS) {
+  globalThis.LOG_LEVELS = LOG_LEVELS;
+}
+if (!globalThis.LOGGER_CONFIG) {
+  globalThis.LOGGER_CONFIG = LOGGER_CONFIG;
+}
 
 // Private state
 let logHistory = [];
@@ -64,11 +72,11 @@ function addLogEntry(entry) {
 // Log to console
 function logToConsole(entry) {
   if (entry.level < currentLevel) return;
-  
+
   const timestamp = formatTimestamp(new Date(entry.timestamp));
   const levelName = Object.keys(LOG_LEVELS).find(key => LOG_LEVELS[key] === entry.level) || 'UNKNOWN';
   const style = `color: ${LOGGER_CONFIG.colors[entry.level] || '#000000'}; font-weight: bold`;
-  
+
   const logMethod = {
     [LOG_LEVELS.DEBUG]: console.debug,
     [LOG_LEVELS.INFO]: console.info,
@@ -76,9 +84,9 @@ function logToConsole(entry) {
     [LOG_LEVELS.ERROR]: console.error,
     [LOG_LEVELS.SUCCESS]: console.log
   }[entry.level] || console.log;
-  
+
   logMethod(`%c[${timestamp}] [${levelName}]`, style, entry.message);
-  
+
   if (entry.level === LOG_LEVELS.ERROR && entry.stack) {
     console.error(entry.stack);
   }
@@ -97,7 +105,7 @@ function init() {
   if (isInitialized) {
     return false;
   }
-  
+
   isInitialized = true;
   log('Logger initialized', LOG_LEVELS.INFO);
   return true;

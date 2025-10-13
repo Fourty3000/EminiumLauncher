@@ -17,19 +17,6 @@ if (typeof globalThis !== 'undefined' && !globalThis.SITE_URL) {
   globalThis.SITE_URL = SITE_URL;
 }
 
-// Create AuthManager object
-const AuthManager = {
-  initialized: false
-};
-
-// Mark as initializing
-AuthManager.initialized = true;
-
-// Export to window if available
-if (typeof window !== 'undefined') {
-  window.AuthManager = AuthManager;
-}
-
 // AzAuth API implementation
 class AzAuthClient {
   constructor(baseUrl) {
@@ -427,7 +414,7 @@ async function performLogin(email, pass, code2fa, options = {}) {
     // Test de connexion au serveur
     window.Logger.info('Test de connexion au serveur...');
     showConnectionStatus('Test de connexion...', 'info');
-    
+
     const connectionTest = await testConnection();
     if (!connectionTest.ok) {
       throw new Error('Impossible de se connecter au serveur. Vérifiez votre connexion internet.');
@@ -444,11 +431,11 @@ async function performLogin(email, pass, code2fa, options = {}) {
       // Afficher le champ 2FA
       if (code2faGroup) code2faGroup.style.display = 'block';
       if (loginText) loginText.textContent = 'Valider le code 2FA';
-      
+
       // Mettre le focus sur le champ 2FA
       const code2faInput = window.DOMUtils.getElement('code2fa', false);
       if (code2faInput) code2faInput.focus();
-      
+
       throw new Error('Code de vérification 2FA requis');
     }
 
@@ -456,16 +443,16 @@ async function performLogin(email, pass, code2fa, options = {}) {
       // Connexion réussie
       window.Logger.success('Connexion réussie!');
       showConnectionStatus('Connexion réussie!', 'success');
-      
+
       // Mettre à jour l'état d'authentification
       authState.accessToken = result.profile.access_token;
       authState.isAuthenticated = true;
       authState.userProfile = result.profile;
       saveAuthState();
-      
+
       // Mettre à jour l'interface utilisateur
       updateUIAfterLogin(result.profile);
-      
+
       if (onSuccess) onSuccess(result.profile);
       return result.profile;
     } else {
@@ -476,18 +463,18 @@ async function performLogin(email, pass, code2fa, options = {}) {
   } catch (error) {
     // Gestion des erreurs
     const errorMessage = error.message || 'Une erreur est survenue lors de la connexion';
-    
+
     if (!quiet) {
       setAuthError(errorMessage);
       window.Logger.error('Erreur de connexion:', errorMessage);
       showConnectionStatus('Échec de la connexion', 'error');
-      
+
       // Réactiver le bouton de connexion
       if (loginButton) loginButton.disabled = false;
       if (loginText) loginText.textContent = 'Se connecter';
       if (loginSpinner) loginSpinner.style.display = 'none';
     }
-    
+
     if (onError) onError(errorMessage);
     return null;
   } finally {
@@ -814,19 +801,19 @@ function initAuthListeners() {
   if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      
+
       if (loginInProgress) {
         console.log('[Auth] Connexion déjà en cours, nouvelle tentative ignorée');
         return;
       }
 
       loginInProgress = true;
-      
+
       try {
         const email = window.DOMUtils.getValue('email', '').trim();
         const password = window.DOMUtils.getValue('password', '');
         const code2fa = window.DOMUtils.getValue('code2fa', '').trim();
-        
+
         await performLogin(email, password, code2fa);
       } catch (error) {
         console.error('Erreur lors de la connexion:', error);
@@ -860,7 +847,7 @@ function initAuthListeners() {
   const emailInput = window.DOMUtils.getElement('email', false);
   const passwordInput = window.DOMUtils.getElement('password', false);
   const code2faInput = window.DOMUtils.getElement('code2fa', false);
-  
+
   [emailInput, passwordInput, code2faInput].forEach(input => {
     if (input) {
       input.addEventListener('keypress', (e) => {
@@ -889,12 +876,13 @@ function initAuthListeners() {
     display: none;
     background: rgba(0,0,0,0.8);
   `
+}
 
-  // Initialize authentication manager
-  function initAuthManager() {
-    initAuthListeners();
-    checkAuthStatus();
-  }
+// Initialize authentication manager
+function initAuthManager() {
+  initAuthListeners();
+  checkAuthStatus();
+}
 
 // Get current auth state
 function getAuthState() {
@@ -903,6 +891,11 @@ function getAuthState() {
     userProfile: authState.userProfile,
     accessToken: authState.accessToken
   };
+}
+
+// Get AuthManager instance (legacy API compatibility)
+function getAuthManager() {
+  return AuthManager;
 }
 
 // Test function to verify navigation works correctly
@@ -931,11 +924,13 @@ function testNavigationSwitch() {
 
 // Export authentication manager
 const AuthManager = {
+  initialized: false,
   performLogin,
   performLogout,
   perform2FALogin,
   checkAuthStatus,
   getAuthState,
+  getAuthManager,
   initAuthManager,
   validateLogin,
   updateUIAfterLogin,
@@ -958,4 +953,8 @@ if (!globalThis.AuthManager) {
 if (typeof window !== 'undefined') {
   window.AuthManager = AuthManager;
 }
+
+// Export for CommonJS
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = AuthManager;
 }
