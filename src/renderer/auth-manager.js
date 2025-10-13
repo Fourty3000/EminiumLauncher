@@ -935,8 +935,6 @@ const AuthManager = {
   validateLogin,
   updateUIAfterLogin,
   resetUIAfterLogout,
-  forceLogin,
-  debugAuthState,
   mapLoginError,
   setAuthError,
   testConnection,

@@ -9,8 +9,8 @@ if (typeof window !== 'undefined' && window.ErrorManager && window.ErrorManager.
   throw new Error('ErrorManager already initialized');
 }
 
-// Error types enumeration
-const ErrorTypes = {
+// Error types enumeration - check if already exists in globalThis
+const ErrorTypes = globalThis.ErrorTypes || {
   NETWORK: 'network',
   AUTH: 'auth',
   FILESYSTEM: 'filesystem',
@@ -21,17 +21,22 @@ const ErrorTypes = {
 };
 
 // Store ErrorTypes in globalThis if not already there
-if (!globalThis.ErrorTypes) {
+if (typeof globalThis !== 'undefined' && !globalThis.ErrorTypes) {
   globalThis.ErrorTypes = ErrorTypes;
 }
 
-// Error severity levels
-const ErrorSeverity = {
+// Error severity levels - check if already exists in globalThis
+const ErrorSeverity = globalThis.ErrorSeverity || {
   LOW: 'low',
   MEDIUM: 'medium',
   HIGH: 'high',
   CRITICAL: 'critical'
 };
+
+// Store ErrorSeverity in globalThis if not already there
+if (typeof globalThis !== 'undefined' && !globalThis.ErrorSeverity) {
+  globalThis.ErrorSeverity = ErrorSeverity;
+}
 
 // Error state - use globalThis to avoid redeclaration
 let _errorState = globalThis._errorState || {
@@ -42,7 +47,7 @@ let _errorState = globalThis._errorState || {
 };
 
 // Store in globalThis to persist across reloads
-if (!globalThis._errorState) {
+if (typeof globalThis !== 'undefined' && !globalThis._errorState) {
   globalThis._errorState = _errorState;
 }
 
@@ -754,7 +759,7 @@ const CallStackProtection = globalThis.CallStackProtection || {
 };
 
 // Store in globalThis to persist across reloads
-if (!globalThis.CallStackProtection) {
+if (typeof globalThis !== 'undefined' && !globalThis.CallStackProtection) {
   globalThis.CallStackProtection = CallStackProtection;
 }
 
@@ -959,7 +964,7 @@ const ErrorManager = {
 };
 
 // Store in globalThis to persist across reloads
-if (!globalThis.ErrorManager) {
+if (typeof globalThis !== 'undefined' && !globalThis.ErrorManager) {
   globalThis.ErrorManager = ErrorManager;
 }
 

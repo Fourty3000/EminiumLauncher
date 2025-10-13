@@ -17,6 +17,11 @@ const LOG_LEVELS = globalThis.LOG_LEVELS || Object.freeze({
   SUCCESS: 4
 });
 
+// Store in globalThis to persist across reloads
+if (typeof globalThis !== 'undefined' && !globalThis.LOG_LEVELS) {
+  globalThis.LOG_LEVELS = LOG_LEVELS;
+}
+
 // Default configuration
 const LOGGER_CONFIG = globalThis.LOGGER_CONFIG || Object.freeze({
   maxHistory: 1000,
@@ -33,10 +38,7 @@ const LOGGER_CONFIG = globalThis.LOGGER_CONFIG || Object.freeze({
 });
 
 // Store in globalThis to persist across reloads
-if (!globalThis.LOG_LEVELS) {
-  globalThis.LOG_LEVELS = LOG_LEVELS;
-}
-if (!globalThis.LOGGER_CONFIG) {
+if (typeof globalThis !== 'undefined' && !globalThis.LOGGER_CONFIG) {
   globalThis.LOGGER_CONFIG = LOGGER_CONFIG;
 }
 
