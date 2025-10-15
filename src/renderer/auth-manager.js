@@ -406,7 +406,7 @@ async function testConnection() {
     if (error.name === 'TimeoutError') {
       return { ok: false, message: 'Timeout de connexion (serveur injoignable)' };
     } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      return { ok: false, message: 'Impossible de contacter le serveur' };
+      return { ok: false, message: 'Impossible de contacter le serveur - Vérifiez votre connexion internet' };
     } else {
       return { ok: false, message: error.message || 'Erreur de connexion inconnue' };
     }
@@ -531,7 +531,7 @@ async function performLogin(email, pass, code2fa, options = {}) {
     }
 
     // Vérification du rate limiting
-    const userIdentifier = email.toLowerCase().trim();
+    const userIdentifier = email ? email.toLowerCase().trim() : 'unknown';
     if (authRateLimiter.isBlocked(userIdentifier)) {
       const remainingTime = authRateLimiter.getRemainingTime(userIdentifier);
       const minutes = Math.ceil(remainingTime / (60 * 1000));
@@ -539,22 +539,38 @@ async function performLogin(email, pass, code2fa, options = {}) {
     }
 
     // Test de connexion au serveur
-    window.Logger.info('Test de connexion au serveur...');
+    if (window.Logger) window.Logger.info('Test de connexion au serveur...');
     showConnectionStatus('Test de connexion...', 'info');
 
     const connectionTest = await testConnection();
     if (!connectionTest.ok) {
-      throw new Error('Impossible de se connecter au serveur. Vérifiez votre connexion internet.');
+      const errorMsg = connectionTest.message;
+      if (window.Logger) window.Logger.error('Test de connexion échoué:', errorMsg);
+
+      // Afficher un message plus détaillé selon le type d'erreur
+      let userMessage = errorMsg;
+      if (errorMsg.includes('Timeout')) {
+        userMessage = '⏱️ Le serveur ne répond pas. Vérifiez votre connexion internet ou réessayez plus tard.';
+      } else if (errorMsg.includes('connexion internet')) {
+        userMessage = '🌐 Impossible de contacter le serveur. Vérifiez votre connexion internet.';
+      } else if (errorMsg.includes('code')) {
+        userMessage = '🔌 Le serveur répond mais rencontre un problème technique. Réessayez plus tard.';
+      }
+
+      throw new Error(userMessage);
     }
 
     // Tentative de connexion
-    window.Logger.info('Tentative de connexion...');
+    if (window.Logger) window.Logger.info('Tentative de connexion...');
     showConnectionStatus('Connexion en cours...', 'info');
 
     const result = await azAuthClient.login(email, pass, code2fa);
 
-    // Enregistrer la tentative (succès ou échec)
-    authRateLimiter.recordAttempt(userIdentifier, result && result.ok);
+    // Enregistrer la tentative (succès ou échec) - seulement si l'email est valide
+    if (email) {
+      const userIdentifier = email.toLowerCase().trim();
+      authRateLimiter.recordAttempt(userIdentifier, result && result.ok);
+    }
 
     // Gestion de la réponse
     if (result && result.status === 'pending' && result.requires2fa) {
@@ -577,7 +593,7 @@ async function performLogin(email, pass, code2fa, options = {}) {
 
     if (result && result.ok && result.profile) {
       // Connexion réussie
-      window.Logger.success('Connexion réussie!');
+      if (window.Logger) window.Logger.success('Connexion réussie!');
       showConnectionStatus('Connexion réussie!', 'success');
 
       // Mettre à jour l'état d'authentification
@@ -602,7 +618,7 @@ async function performLogin(email, pass, code2fa, options = {}) {
 
     if (!quiet) {
       setAuthError(errorMessage);
-      window.Logger.error('Erreur de connexion:', errorMessage);
+      if (window.Logger) window.Logger.error('Erreur de connexion:', errorMessage);
       showConnectionStatus('Échec de la connexion', 'error');
 
       // Réactiver le bouton de connexion
@@ -1162,25 +1178,59 @@ function testNavigationSwitch() {
   }
 }
 
-// Export authentication manager
-const AuthManager = {
-  initialized: false,
-  performLogin,
-  performLogout,
-  perform2FALogin,
-  checkAuthStatus,
-  getAuthState,
-  getAuthManager,
-  initAuthManager,
-  validateLogin,
-  updateUIAfterLogin,
-  resetUIAfterLogout,
-  mapLoginError,
-  setAuthError,
-  testConnection,
-  showConnectionStatus,
-  testNavigationSwitch
-};
+// Fonction de diagnostic complète du système d'authentification
+async function runAuthDiagnostic() {
+  console.log('🔧 [DIAGNOSTIC] Démarrage du diagnostic d\'authentification...');
+
+  const results = {
+    network: false,
+    server: false,
+    api: false,
+    auth: false
+  };
+
+  try {
+    // Test 1: Connexion réseau basique
+    console.log('📡 Test de connexion réseau...');
+    const networkTest = await fetch('https://www.google.com/favicon.ico', {
+      method: 'HEAD',
+      mode: 'no-cors'
+    }).catch(() => null);
+
+    results.network = !!networkTest;
+    console.log(`✅ Réseau: ${results.network ? 'OK' : 'ÉCHEC'}`);
+
+    // Test 2: Connexion au serveur Eminium
+    console.log('🏠 Test de connexion au serveur Eminium...');
+    const connectionTest = await testConnection();
+    results.server = connectionTest.ok;
+    console.log(`✅ Serveur: ${results.server ? 'OK' : 'ÉCHEC'} - ${connectionTest.message}`);
+
+    if (results.server) {
+      // Test 3: Test de l'API d'authentification
+      console.log('🔐 Test de l\'API d\'authentification...');
+      const apiTest = await azAuthClient.verify('test');
+      results.api = !!(apiTest && (apiTest.ok || apiTest.error)); // API répond (même avec erreur)
+      console.log(`✅ API: ${results.api ? 'OK' : 'ÉCHEC'}`);
+    }
+
+    // Résumé
+    const successCount = Object.values(results).filter(Boolean).length;
+    console.log(`📊 Résumé diagnostic: ${successCount}/4 tests réussis`);
+
+    if (successCount === 4) {
+      console.log('🎉 Tous les tests sont passés ! Le système d\'authentification est prêt.');
+      return { success: true, message: 'Système d\'authentification opérationnel' };
+    } else {
+      console.log('⚠️ Certains tests ont échoué. Vérifiez les détails ci-dessus.');
+      return { success: false, message: 'Des problèmes détectés', details: results };
+    }
+
+  } catch (error) {
+    console.error('❌ Erreur lors du diagnostic:', error);
+    return { success: false, message: 'Erreur lors du diagnostic', error: error.message };
+  }
+}
 
 // Store in globalThis to persist across reloads
 if (!globalThis.AuthManager) {
