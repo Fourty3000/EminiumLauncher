@@ -154,12 +154,80 @@ if (!globalThis.AzAuthClient) {
   globalThis.AzAuthClient = AzAuthClient;
 }
 
-// Global state for authentication - use globalThis to avoid redeclaration
-let authState = globalThis.authState || {
-  isAuthenticated: false,
-  userProfile: null,
-  accessToken: null
-};
+// Système de rate limiting pour éviter les attaques par force brute
+class RateLimiter {
+  constructor() {
+    this.attempts = new Map();
+    this.maxAttempts = 5;
+    this.windowMs = 15 * 60 * 1000; // 15 minutes
+    this.blockDuration = 30 * 60 * 1000; // 30 minutes de blocage
+  }
+
+  isBlocked(identifier) {
+    const attempts = this.attempts.get(identifier);
+    if (!attempts) return false;
+
+    const now = Date.now();
+    const isInWindow = (now - attempts.firstAttempt) < this.windowMs;
+    const isBlocked = attempts.blockedUntil && now < attempts.blockedUntil;
+
+    return (attempts.count >= this.maxAttempts && isInWindow) || isBlocked;
+  }
+
+  recordAttempt(identifier, success = false) {
+    const now = Date.now();
+    let attempts = this.attempts.get(identifier);
+
+    if (!attempts) {
+      attempts = {
+        count: 0,
+        firstAttempt: now,
+        blockedUntil: null
+      };
+      this.attempts.set(identifier, attempts);
+    }
+
+    if (success) {
+      // Succès - réinitialiser le compteur
+      attempts.count = 0;
+      attempts.blockedUntil = null;
+    } else {
+      // Échec - incrémenter le compteur
+      attempts.count++;
+
+      if (attempts.count >= this.maxAttempts) {
+        attempts.blockedUntil = now + this.blockDuration;
+      }
+    }
+
+    // Nettoyer les anciennes entrées périodiquement
+    if (Math.random() < 0.01) { // 1% de chance à chaque appel
+      this.cleanup();
+    }
+
+    return attempts;
+  }
+
+  cleanup() {
+    const now = Date.now();
+    for (const [identifier, attempts] of this.attempts.entries()) {
+      if (attempts.blockedUntil && now > attempts.blockedUntil) {
+        this.attempts.delete(identifier);
+      }
+    }
+  }
+
+  getRemainingTime(identifier) {
+    const attempts = this.attempts.get(identifier);
+    if (!attempts || !attempts.blockedUntil) return 0;
+
+    const remaining = attempts.blockedUntil - Date.now();
+    return Math.max(0, remaining);
+  }
+}
+
+// Instance globale du rate limiter
+const authRateLimiter = new RateLimiter();
 
 // Store in globalThis to persist across reloads
 if (!globalThis.authState) {
@@ -212,18 +280,65 @@ function clearAuthState() {
   }
 }
 
-// Validation formulaire login
-function validateLogin(email, pass, code2fa) {
-  if (!email || !pass) {
-    return { valid: false, error: 'Email et mot de passe requis' };
+// Gestion des erreurs 2FA améliorée
+function handle2FAError(error, attemptCount = 0) {
+  const maxAttempts = 3;
+  const errorMessages = {
+    invalid_2fa: attemptCount < maxAttempts ?
+      `Code 2FA incorrect. Tentative ${attemptCount + 1}/${maxAttempts}` :
+      'Trop de tentatives 2FA échouées. Veuillez réessayer plus tard.',
+    expired_2fa: 'Code 2FA expiré. Veuillez en demander un nouveau.',
+    blocked_2fa: 'Compte temporairement bloqué en raison de tentatives 2FA échouées.',
+    network_error: 'Erreur réseau lors de la vérification 2FA. Vérifiez votre connexion.',
+    server_error: 'Erreur serveur lors de la vérification 2FA. Réessayez plus tard.'
+  };
+
+  const errorType = error.reason || error.message || 'unknown';
+  const userFriendlyMessage = errorMessages[errorType] || 'Erreur lors de la vérification 2FA';
+
+  setAuthError(userFriendlyMessage);
+
+  // Animation d'erreur pour le champ 2FA
+  const code2faInput = window.DOMUtils.getElement('code2fa', false);
+  if (code2faInput) {
+    code2faInput.style.animation = 'shake 0.5s ease-in-out';
+    setTimeout(() => {
+      code2faInput.style.animation = '';
+    }, 500);
   }
-  if (!email.includes('@')) {
-    return { valid: false, error: 'Email invalide' };
+
+  return attemptCount >= maxAttempts;
+}
+
+// Animation CSS pour l'erreur 2FA (ajoutée dynamiquement)
+function add2FAErrorAnimation() {
+  if (!document.getElementById('auth-animations')) {
+    const style = document.createElement('style');
+    style.id = 'auth-animations';
+    style.textContent = `
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-5px); }
+        75% { transform: translateX(5px); }
+      }
+
+      @keyframes slideInDown {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .form-group.animated {
+        animation: slideInDown 0.3s ease-out;
+      }
+    `;
+    document.head.appendChild(style);
   }
-  if (pass.length < 6) {
-    return { valid: false, error: 'Mot de passe trop court' };
-  }
-  return { valid: true };
 }
 
 // Set authentication error message
@@ -400,15 +515,27 @@ async function performLogin(email, pass, code2fa, options = {}) {
   }
 
   try {
-    // Validation des champs
-    if (!email || !email.includes('@')) {
-      throw new Error('Veuillez entrer une adresse email valide');
+    // Validation des champs côté client AVANT d'essayer de se connecter
+    const validation = validateLogin(email, pass, code2fa);
+    if (!validation.valid) {
+      const fieldInput = window.DOMUtils.getElement(validation.field, false);
+      if (fieldInput) {
+        fieldInput.focus();
+        // Animation d'erreur pour le champ invalide
+        fieldInput.style.animation = 'shake 0.5s ease-in-out';
+        setTimeout(() => {
+          fieldInput.style.animation = '';
+        }, 500);
+      }
+      throw new Error(validation.error);
     }
-    if (!pass) {
-      throw new Error('Veuillez entrer votre mot de passe');
-    }
-    if (code2fa && code2fa.length !== 6) {
-      throw new Error('Le code 2FA doit contenir 6 chiffres');
+
+    // Vérification du rate limiting
+    const userIdentifier = email.toLowerCase().trim();
+    if (authRateLimiter.isBlocked(userIdentifier)) {
+      const remainingTime = authRateLimiter.getRemainingTime(userIdentifier);
+      const minutes = Math.ceil(remainingTime / (60 * 1000));
+      throw new Error(`Trop de tentatives de connexion. Réessayez dans ${minutes} minute(s).`);
     }
 
     // Test de connexion au serveur
@@ -426,16 +553,25 @@ async function performLogin(email, pass, code2fa, options = {}) {
 
     const result = await azAuthClient.login(email, pass, code2fa);
 
+    // Enregistrer la tentative (succès ou échec)
+    authRateLimiter.recordAttempt(userIdentifier, result && result.ok);
+
     // Gestion de la réponse
     if (result && result.status === 'pending' && result.requires2fa) {
-      // Afficher le champ 2FA
-      if (code2faGroup) code2faGroup.style.display = 'block';
+      // Afficher le champ 2FA avec animation
+      const code2faGroup = window.DOMUtils.getElement('code2faGroup', false);
+      if (code2faGroup) {
+        code2faGroup.style.display = 'block';
+        code2faGroup.classList.add('animated');
+
+        // Mettre le focus sur le champ 2FA après l'animation
+        setTimeout(() => {
+          const code2faInput = window.DOMUtils.getElement('code2fa', false);
+          if (code2faInput) code2faInput.focus();
+        }, 300);
+      }
+
       if (loginText) loginText.textContent = 'Valider le code 2FA';
-
-      // Mettre le focus sur le champ 2FA
-      const code2faInput = window.DOMUtils.getElement('code2fa', false);
-      if (code2faInput) code2faInput.focus();
-
       throw new Error('Code de vérification 2FA requis');
     }
 
@@ -772,18 +908,120 @@ function resetUIAfterLogout() {
   console.log('[Auth] UI reset for logged out state');
 }
 
-// Function to show connection status
-function showConnectionStatus(message, type = 'info') {
-  const indicator = document.getElementById('connectionStatus');
-  if (indicator) {
-    indicator.textContent = message;
-    indicator.style.background = type === 'error' ? 'rgba(220,38,38,0.9)' :
-                                 type === 'success' ? 'rgba(34,197,94,0.9)' :
-                                 'rgba(0,0,0,0.8)';
-    indicator.style.display = 'block';
-    setTimeout(() => {
-      indicator.style.display = 'none';
-    }, 5000);
+// Validation formulaire login améliorée avec retour détaillé
+function validateLogin(email, pass, code2fa) {
+  // Validation email
+  if (!email || !email.trim()) {
+    return { valid: false, error: 'L\'adresse email est requise', field: 'email' };
+  }
+
+  if (!email.includes('@') || !email.includes('.')) {
+    return { valid: false, error: 'Format d\'email invalide', field: 'email' };
+  }
+
+  // Vérification de la longueur et des caractères spéciaux
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return { valid: false, error: 'Format d\'email invalide', field: 'email' };
+  }
+
+  if (email.length > 254) { // RFC 5321 limit
+    return { valid: false, error: 'Adresse email trop longue', field: 'email' };
+  }
+
+  // Validation mot de passe
+  if (!pass || !pass.trim()) {
+    return { valid: false, error: 'Le mot de passe est requis', field: 'password' };
+  }
+
+  if (pass.length < 8) {
+    return { valid: false, error: 'Le mot de passe doit contenir au moins 8 caractères', field: 'password' };
+  }
+
+  if (pass.length > 128) {
+    return { valid: false, error: 'Mot de passe trop long (maximum 128 caractères)', field: 'password' };
+  }
+
+  // Validation code 2FA (si fourni)
+  if (code2fa && code2fa.trim()) {
+    if (code2fa.length !== 6) {
+      return { valid: false, error: 'Le code 2FA doit contenir exactement 6 chiffres', field: 'code2fa' };
+    }
+
+    if (!/^\d{6}$/.test(code2fa)) {
+      return { valid: false, error: 'Le code 2FA ne doit contenir que des chiffres', field: 'code2fa' };
+    }
+  }
+
+  return { valid: true };
+}
+
+// Validation en temps réel des champs
+function setupRealTimeValidation() {
+  const emailInput = window.DOMUtils.getElement('email', false);
+  const passwordInput = window.DOMUtils.getElement('password', false);
+  const code2faInput = window.DOMUtils.getElement('code2fa', false);
+
+  function addValidationStyling(input, isValid, errorMsg) {
+    if (!input) return;
+
+    const formGroup = input.closest('.form-group');
+    if (!formGroup) return;
+
+    // Supprimer les anciennes classes de validation
+    formGroup.classList.remove('error', 'success');
+
+    if (isValid) {
+      formGroup.classList.add('success');
+      input.style.borderColor = 'var(--success)';
+    } else if (errorMsg) {
+      formGroup.classList.add('error');
+      input.style.borderColor = 'var(--error)';
+    } else {
+      input.style.borderColor = '';
+    }
+  }
+
+  if (emailInput) {
+    emailInput.addEventListener('blur', () => {
+      const email = emailInput.value.trim();
+      if (email) {
+        const validation = validateLogin(email, 'dummy');
+        addValidationStyling(emailInput, validation.valid, validation.error);
+      }
+    });
+
+    emailInput.addEventListener('input', () => {
+      if (emailInput.style.borderColor === 'var(--error)') {
+        addValidationStyling(emailInput, true, null);
+      }
+    });
+  }
+
+  if (passwordInput) {
+    passwordInput.addEventListener('blur', () => {
+      const password = passwordInput.value;
+      if (password) {
+        const validation = validateLogin('test@test.com', password);
+        addValidationStyling(passwordInput, validation.valid, validation.error);
+      }
+    });
+
+    passwordInput.addEventListener('input', () => {
+      if (passwordInput.style.borderColor === 'var(--error)') {
+        addValidationStyling(passwordInput, true, null);
+      }
+    });
+  }
+
+  if (code2faInput) {
+    code2faInput.addEventListener('input', () => {
+      const code = code2faInput.value;
+      if (code) {
+        const isValid = /^\d{0,6}$/.test(code);
+        addValidationStyling(code2faInput, isValid, isValid ? null : 'Format invalide');
+      }
+    });
   }
 }
 
@@ -880,6 +1118,8 @@ function initAuthListeners() {
 
 // Initialize authentication manager
 function initAuthManager() {
+  add2FAErrorAnimation();
+  setupRealTimeValidation();
   initAuthListeners();
   checkAuthStatus();
 }
