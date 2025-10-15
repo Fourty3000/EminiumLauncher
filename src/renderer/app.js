@@ -54,13 +54,20 @@ async function initializeApp() {
     }
 
     // Initialize authentication manager FIRST - this will check if user is already logged in
-    if (window.AuthManager) {
+    if (window.AuthManager && typeof window.AuthManager.initAuthManager === 'function') {
       console.log('[App] Checking authentication status...');
-      window.AuthManager.initAuthManager();
-
-      // Get authentication status after initialization
-      _appState.authenticated = await window.AuthManager.checkAuthStatus();
-      console.log('[App] Authentication status:', _appState.authenticated);
+      try {
+        window.AuthManager.initAuthManager();
+        // Get authentication status after initialization
+        _appState.authenticated = await window.AuthManager.checkAuthStatus();
+        console.log('[App] Authentication status:', _appState.authenticated);
+      } catch (error) {
+        console.warn('[App] AuthManager initialization failed:', error.message);
+        _appState.authenticated = false;
+      }
+    } else {
+      console.warn('[App] AuthManager not available or not properly initialized');
+      _appState.authenticated = false;
     }
 
     // Initialize new secure authentication system v2.0

@@ -229,17 +229,16 @@ class RateLimiter {
 // Instance globale du rate limiter
 const authRateLimiter = new RateLimiter();
 
+// Initial authentication state
+let authState = {
+  isAuthenticated: false,
+  userProfile: null,
+  accessToken: null
+};
+
 // Store in globalThis to persist across reloads
 if (!globalThis.authState) {
   globalThis.authState = authState;
-}
-
-// Create auth client instance - use globalThis to avoid redeclaration
-const azAuthClient = globalThis.azAuthClient || new AzAuthClient(SITE_URL);
-
-// Store in globalThis to persist across reloads
-if (!globalThis.azAuthClient) {
-  globalThis.azAuthClient = azAuthClient;
 }
 
 // Save auth state
@@ -399,6 +398,10 @@ async function testConnection() {
     } else if (response.status === 422) {
       // 422 means invalid parameters but server is reachable
       return { ok: true, message: 'Connexion au serveur OK (API AzAuth détectée)' };
+    } else if (response.status === 404) {
+      return { ok: false, message: 'Point de terminaison API non trouvé - Vérifiez l\'URL du serveur' };
+    } else if (response.status >= 500) {
+      return { ok: false, message: `Erreur serveur (${response.status}) - Le serveur rencontre des problèmes` };
     } else {
       return { ok: false, message: `Serveur répond avec le code ${response.status}` };
     }
@@ -407,6 +410,8 @@ async function testConnection() {
       return { ok: false, message: 'Timeout de connexion (serveur injoignable)' };
     } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
       return { ok: false, message: 'Impossible de contacter le serveur - Vérifiez votre connexion internet' };
+    } else if (error.name === 'AbortError') {
+      return { ok: false, message: 'Requête annulée - Timeout atteint' };
     } else {
       return { ok: false, message: error.message || 'Erreur de connexion inconnue' };
     }
@@ -656,7 +661,7 @@ async function performLogout() {
     }
 
     // Get stored access token - check if authState exists first
-    const accessToken = (typeof authState !== 'undefined' && authState) ? authState.accessToken : null;
+    const accessToken = authState ? authState.accessToken : null;
 
     if (accessToken) {
       // Call logout API
@@ -1160,9 +1165,57 @@ function getAuthState() {
   };
 }
 
-// Get AuthManager instance (legacy API compatibility)
-function getAuthManager() {
-  return AuthManager;
+// Debug function to test authentication
+async function debugAuth() {
+  console.log('🔧 [DEBUG AUTH] Starting authentication debug...');
+
+  try {
+    // Test 1: Check if DOM elements exist
+    console.log('📋 [DEBUG] Checking DOM elements...');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const loginBtn = document.getElementById('loginBtn');
+
+    console.log('Email input:', !!emailInput);
+    console.log('Password input:', !!passwordInput);
+    console.log('Login button:', !!loginBtn);
+
+    // Test 2: Check auth state
+    console.log('🔐 [DEBUG] Current auth state:', {
+      isAuthenticated: authState.isAuthenticated,
+      hasProfile: !!authState.userProfile,
+      hasToken: !!authState.accessToken,
+      profile: authState.userProfile ? { username: authState.userProfile.username } : null
+    });
+
+    // Test 3: Test server connection
+    console.log('🌐 [DEBUG] Testing server connection...');
+    const connectionTest = await testConnection();
+    console.log('Connection test result:', connectionTest);
+
+    // Test 4: Check if AuthManager is properly initialized
+    console.log('⚙️ [DEBUG] AuthManager status:', {
+      exists: !!globalThis.AuthManager,
+      initialized: globalThis.AuthManager ? globalThis.AuthManager.initialized : false
+    });
+
+    console.log('✅ [DEBUG AUTH] Debug completed');
+
+    return {
+      domElements: {
+        email: !!emailInput,
+        password: !!passwordInput,
+        loginBtn: !!loginBtn
+      },
+      authState: authState,
+      connection: connectionTest,
+      authManager: !!globalThis.AuthManager
+    };
+
+  } catch (error) {
+    console.error('❌ [DEBUG AUTH] Error during debug:', error);
+    return { error: error.message };
+  }
 }
 
 // Test function to verify navigation works correctly
@@ -1243,17 +1296,55 @@ async function runAuthDiagnostic() {
   }
 }
 
+// AuthManager class definition
+class AuthManager {
+  constructor() {
+    this.initialized = false;
+    this.rateLimiter = authRateLimiter;
+    this.azAuthClient = azAuthClient;
+  }
+
+  initAuthManager() {
+    if (this.initialized) {
+      throw new Error('AuthManager already initialized');
+    }
+    this.initialized = true;
+    add2FAErrorAnimation();
+    setupRealTimeValidation();
+    initAuthListeners();
+    checkAuthStatus();
+    return this;
+  }
+
+  async checkAuthStatus() {
+    return await checkAuthStatus();
+  }
+
+  async performLogin(email, password, code2fa) {
+    return await performLogin(email, password, code2fa);
+  }
+
+  async performLogout() {
+    return await performLogout();
+  }
+
+  getAuthState() {
+    return getAuthState();
+  }
+
+  async runAuthDiagnostic() {
+    return await runAuthDiagnostic();
+  }
+
+  async debugAuth() {
+    return await debugAuth();
+  }
+}
+
+// Create global AuthManager instance
+const authManagerInstance = new AuthManager();
+
 // Store in globalThis to persist across reloads
 if (!globalThis.AuthManager) {
-  globalThis.AuthManager = AuthManager;
-}
-
-// Also expose to window for backward compatibility
-if (typeof window !== 'undefined') {
-  window.AuthManager = AuthManager;
-}
-
-// Export for CommonJS
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = AuthManager;
+  globalThis.AuthManager = authManagerInstance;
 }
