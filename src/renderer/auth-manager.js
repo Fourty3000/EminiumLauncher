@@ -655,51 +655,62 @@ async function performLogout() {
       logoutBtn.textContent = 'Déconnexion...';
     }
 
-    // Get stored access token
-    const accessToken = authState.accessToken;
+    // Get stored access token - check if authState exists first
+    const accessToken = (typeof authState !== 'undefined' && authState) ? authState.accessToken : null;
 
-    // Call logout API
-    const result = await azAuthClient.logout(accessToken);
+    if (accessToken) {
+      // Call logout API
+      const result = await azAuthClient.logout(accessToken);
 
-    if (result && result.ok) {
-      console.log('[Auth] Logout successful');
+      if (result && result.ok) {
+        console.log('[Auth] Logout successful');
 
-      // Clear global state
-      clearAuthState();
+        // Clear global state
+        clearAuthState();
 
-      // Show success message
-      if (window.Logger) {
-        window.Logger.success('Déconnexion réussie');
+        // Show success message
+        if (window.Logger) {
+          window.Logger.success('Déconnexion réussie');
+        }
+
+        // Complete UI reset
+        resetUIAfterLogout();
+
+        // Update app state if available
+        if (window.App && window.App.getState) {
+          const state = window.App.getState();
+          if (state) {
+            state.authenticated = false;
+            // Clear any cached profile data
+            state.userProfile = null;
+          }
+        }
+
+        // Show success notification
+        if (window.UIHelpers && window.UIHelpers.showNotification) {
+          window.UIHelpers.showNotification('Déconnexion réussie ! Vous pouvez vous reconnecter.', 'success');
+        }
+
+        // Re-enable logout button after a short delay
+        setTimeout(() => {
+          if (logoutBtn) {
+            logoutBtn.disabled = false;
+            logoutBtn.textContent = '🚪 Déconnexion';
+          }
+        }, 1000);
+
+      } else {
+        throw new Error(result?.error || 'Logout failed');
       }
-
-      // Complete UI reset
+    } else {
+      // No access token, just clear local state
+      console.log('[Auth] No access token found, clearing local state only');
+      clearAuthState();
       resetUIAfterLogout();
 
-      // Update app state if available
-      if (window.App && window.App.getState) {
-        const state = window.App.getState();
-        if (state) {
-          state.authenticated = false;
-          // Clear any cached profile data
-          state.userProfile = null;
-        }
-      }
-
-      // Show success notification
       if (window.UIHelpers && window.UIHelpers.showNotification) {
         window.UIHelpers.showNotification('Déconnexion réussie ! Vous pouvez vous reconnecter.', 'success');
       }
-
-      // Re-enable logout button after a short delay
-      setTimeout(() => {
-        if (logoutBtn) {
-          logoutBtn.disabled = false;
-          logoutBtn.textContent = '🚪 Déconnexion';
-        }
-      }, 1000);
-
-    } else {
-      throw new Error(result?.error || 'Logout failed');
     }
 
   } catch (error) {
@@ -788,7 +799,7 @@ async function checkAuthStatus() {
     loadAuthState();
 
     // If we have saved auth state, try to verify it
-    if (authState.isAuthenticated && authState.accessToken) {
+    if (authState && authState.isAuthenticated && authState.accessToken) {
       const result = await azAuthClient.verify(authState.accessToken);
       if (result && result.ok && result.profile) {
         console.log('[Auth] User is already logged in:', result.profile.username);
