@@ -1303,6 +1303,18 @@
                             <!-- Status Messages -->
                             <div class="status-message" id="authError"></div>
                             <div class="status-message success" id="authSuccess"></div>
+
+                            <!-- Debug Panel (visible only in development) -->
+                            <details style="margin-top: 1rem;">
+                                <summary style="color: var(--text-secondary); font-size: 0.8rem; cursor: pointer; padding: 0.5rem; background: rgba(255,255,255,0.05); border-radius: 4px;">🔧 Debug Authentification</summary>
+                                <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px; font-size: 0.75rem; font-family: monospace;">
+                                    <button onclick="testNetwork()" style="margin: 0.25rem; padding: 0.25rem 0.5rem; background: #3b82f6; color: white; border: none; border-radius: 3px; font-size: 0.7rem;">🌐 Test Réseau</button>
+                                    <button onclick="testServer()" style="margin: 0.25rem; padding: 0.25rem 0.5rem; background: #10b981; color: white; border: none; border-radius: 3px; font-size: 0.7rem;">🏠 Test Serveur</button>
+                                    <button onclick="testAuth()" style="margin: 0.25rem; padding: 0.25rem 0.5rem; background: #f59e0b; color: white; border: none; border-radius: 3px; font-size: 0.7rem;">🔐 Test Auth</button>
+                                    <button onclick="clearStorage()" style="margin: 0.25rem; padding: 0.25rem 0.5rem; background: #ef4444; color: white; border: none; border-radius: 3px; font-size: 0.7rem;">🗑️ Effacer Données</button>
+                                    <div id="debugOutput" style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.5); border-radius: 3px; max-height: 100px; overflow-y: auto; font-size: 0.7rem;"></div>
+                                </div>
+                            </details>
                         </div>
                     </div>
                 </section>
@@ -2360,6 +2372,18 @@
                             <!-- Status Messages -->
                             <div class="status-message" id="authError"></div>
                             <div class="status-message success" id="authSuccess"></div>
+
+                            <!-- Debug Panel (visible only in development) -->
+                            <details style="margin-top: 1rem;">
+                                <summary style="color: var(--text-secondary); font-size: 0.8rem; cursor: pointer; padding: 0.5rem; background: rgba(255,255,255,0.05); border-radius: 4px;">🔧 Debug Authentification</summary>
+                                <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px; font-size: 0.75rem; font-family: monospace;">
+                                    <button onclick="testNetwork()" style="margin: 0.25rem; padding: 0.25rem 0.5rem; background: #3b82f6; color: white; border: none; border-radius: 3px; font-size: 0.7rem;">🌐 Test Réseau</button>
+                                    <button onclick="testServer()" style="margin: 0.25rem; padding: 0.25rem 0.5rem; background: #10b981; color: white; border: none; border-radius: 3px; font-size: 0.7rem;">🏠 Test Serveur</button>
+                                    <button onclick="testAuth()" style="margin: 0.25rem; padding: 0.25rem 0.5rem; background: #f59e0b; color: white; border: none; border-radius: 3px; font-size: 0.7rem;">🔐 Test Auth</button>
+                                    <button onclick="clearStorage()" style="margin: 0.25rem; padding: 0.25rem 0.5rem; background: #ef4444; color: white; border: none; border-radius: 3px; font-size: 0.7rem;">🗑️ Effacer Données</button>
+                                    <div id="debugOutput" style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.5); border-radius: 3px; max-height: 100px; overflow-y: auto; font-size: 0.7rem;"></div>
+                                </div>
+                            </details>
                         </div>
                     </div>
                 </section>
@@ -2679,5 +2703,84 @@
     <script src="./ui-helpers.js"></script>
     <script src="./settings-manager.js"></script>
     <script src="./app.js"></script>
+
+    <!-- Debug Functions -->
+    <script>
+        function addDebugMessage(message, type = 'info') {
+            const output = document.getElementById('debugOutput');
+            if (output) {
+                const timestamp = new Date().toLocaleTimeString();
+                const color = type === 'error' ? '#ef4444' : type === 'success' ? '#10b981' : '#6b7280';
+                output.innerHTML += `<div style="color: ${color}; margin: 0.25rem 0;">[${timestamp}] ${message}</div>`;
+                output.scrollTop = output.scrollHeight;
+            }
+        }
+
+        async function testNetwork() {
+            addDebugMessage('Test de connexion réseau...', 'info');
+            try {
+                const response = await fetch('https://www.google.com/favicon.ico', { method: 'HEAD', mode: 'no-cors' });
+                addDebugMessage('✅ Réseau OK', 'success');
+            } catch (error) {
+                addDebugMessage('❌ Réseau échoué: ' + error.message, 'error');
+            }
+        }
+
+        async function testServer() {
+            addDebugMessage('Test de connexion au serveur Eminium...', 'info');
+            try {
+                const response = await fetch('https://eminium.ovh/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ access_token: 'test' })
+                });
+                if (response.ok || response.status === 422) {
+                    addDebugMessage('✅ Serveur accessible', 'success');
+                } else {
+                    addDebugMessage('❌ Serveur répond avec code ' + response.status, 'error');
+                }
+            } catch (error) {
+                addDebugMessage('❌ Serveur injoignable: ' + error.message, 'error');
+            }
+        }
+
+        async function testAuth() {
+            addDebugMessage('Test de l\'API d\'authentification...', 'info');
+            try {
+                const response = await fetch('https://eminium.ovh/authenticate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: 'test@test.com',
+                        password: 'test'
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    addDebugMessage('✅ API d\'authentification fonctionne', 'success');
+                } else {
+                    addDebugMessage('❌ API répond avec code ' + response.status + ': ' + (data.message || 'Erreur inconnue'), 'error');
+                }
+            } catch (error) {
+                addDebugMessage('❌ Test d\'authentification échoué: ' + error.message, 'error');
+            }
+        }
+
+        function clearStorage() {
+            if (confirm('Êtes-vous sûr de vouloir effacer toutes les données locales ?')) {
+                localStorage.clear();
+                sessionStorage.clear();
+                addDebugMessage('🗑️ Données locales effacées', 'success');
+                setTimeout(() => location.reload(), 1000);
+            }
+        }
+
+        // Auto-run diagnostics on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                addDebugMessage('🔧 Debug panel initialisé - cliquez sur les boutons pour tester');
+            }, 1000);
+        });
+    </script>
 </body>
 </html>
