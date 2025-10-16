@@ -9,15 +9,18 @@
   },
   "main": "src/main.js",
   "scripts": {
-    "start": "npx webpack --mode development && electron . --dev",
-    "build": "npx webpack --mode production",
+    "start": "electron . --dev",
+    "build": "electron-builder --dir",
+    "dev": "npm start",
+    "electron": "electron .",
+    "webpack": "webpack --mode development",
+    "webpack:prod": "webpack --mode production",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
     "dist:linux": "npm run build && electron-builder --linux",
     "dist:mac": "npm run build && electron-builder --mac",
-    "icons": "electron-builder icon -i assets/icon/icon.png -o assets/icon",
-    "dev": "npx webpack --mode development --watch"
+    "icons": "electron-builder icon -i assets/icon/icon.png -o assets/icon"
   },
   "dependencies": {
     "adm-zip": "^0.5.10",

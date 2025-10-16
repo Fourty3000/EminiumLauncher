@@ -10,24 +10,7 @@ module.exports = {
   mode: isProduction ? 'production' : 'development',
   devtool: isProduction ? 'source-map' : 'eval-source-map',
   entry: {
-    main: './src/renderer/app.js',
-    vendor: [
-      './src/renderer/dom-utils.js',
-      './src/renderer/common-utils.js',
-      './src/renderer/error-manager.js',
-      './src/renderer/logger.js',
-      './src/renderer/auth-manager.js',
-      './src/renderer/progress-ui.js',
-      './src/renderer/updater-manager.js',
-      './src/renderer/ui-helpers.js',
-      './src/renderer/settings-manager.js',
-      './src/renderer/auth-config.js',
-      './src/renderer/secure-utils.js',
-      './src/renderer/secure-logger.js',
-      './src/renderer/network-manager.js',
-      './src/renderer/auth-manager-v2.js',
-      './src/renderer/auth-tester.js'
-    ]
+    main: './src/renderer/eminium-launcher.js'
   },
   output: {
     filename: '[name].bundle.js',

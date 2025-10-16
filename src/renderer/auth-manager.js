@@ -309,35 +309,33 @@ function handle2FAError(error, attemptCount = 0) {
   return attemptCount >= maxAttempts;
 }
 
-// Animation CSS pour l'erreur 2FA (ajoutée dynamiquement)
-function add2FAErrorAnimation() {
-  if (!document.getElementById('auth-animations')) {
-    const style = document.createElement('style');
-    style.id = 'auth-animations';
-    style.textContent = `
-      @keyframes shake {
-        0%, 100% { transform: translateX(0); }
-        25% { transform: translateX(-5px); }
-        75% { transform: translateX(5px); }
-      }
+// Fonction pour afficher le formulaire 2FA de manière fluide
+function show2FAForm() {
+  const code2faGroup = window.DOMUtils.getElement('code2faGroup', false);
+  if (!code2faGroup) return;
 
-      @keyframes slideInDown {
-        from {
-          opacity: 0;
-          transform: translateY(-10px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
+  // Masquer temporairement le groupe pour l'animation
+  code2faGroup.style.opacity = '0';
+  code2faGroup.style.display = 'block';
+  code2faGroup.style.transform = 'translateY(20px)';
 
-      .form-group.animated {
-        animation: slideInDown 0.3s ease-out;
+  // Animation d'apparition
+  requestAnimationFrame(() => {
+    code2faGroup.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+    code2faGroup.style.opacity = '1';
+    code2faGroup.style.transform = 'translateY(0)';
+    code2faGroup.classList.add('animated');
+
+    // Mettre le focus sur le champ 2FA après l'animation
+    setTimeout(() => {
+      const code2faInput = window.DOMUtils.getElement('code2fa', false);
+      if (code2faInput) {
+        code2faInput.focus();
+        // Sélectionner tout le contenu pour faciliter la saisie
+        code2faInput.select();
       }
-    `;
-    document.head.appendChild(style);
-  }
+    }, 300);
+  });
 }
 
 // Set authentication error message
@@ -579,19 +577,8 @@ async function performLogin(email, pass, code2fa, options = {}) {
 
     // Gestion de la réponse
     if (result && result.status === 'pending' && result.requires2fa) {
-      // Afficher le champ 2FA avec animation
-      const code2faGroup = window.DOMUtils.getElement('code2faGroup', false);
-      if (code2faGroup) {
-        code2faGroup.style.display = 'block';
-        code2faGroup.classList.add('animated');
-
-        // Mettre le focus sur le champ 2FA après l'animation
-        setTimeout(() => {
-          const code2faInput = window.DOMUtils.getElement('code2fa', false);
-          if (code2faInput) code2faInput.focus();
-        }, 300);
-      }
-
+      // Afficher le champ 2FA avec animation fluide
+      show2FAForm();
       if (loginText) loginText.textContent = 'Valider le code 2FA';
       throw new Error('Code de vérification 2FA requis');
     }

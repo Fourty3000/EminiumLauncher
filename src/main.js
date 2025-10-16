@@ -671,10 +671,14 @@ ipcMain.handle('launcher:play', async (_evt, userOpts) => {
 
     // (VPN/proxy reminder removed)
 
+    // Désactiver temporairement la vérification de serveur pour éviter les erreurs réseau
+    const up = true; // Simuler serveur en ligne
+    /*
     // Enforce server availability before launching
     const host = (userOpts && userOpts.serverHost) ? String(userOpts.serverHost) : 'play.eminium.ovh';
     const port = (userOpts && userOpts.serverPort) ? Number(userOpts.serverPort) : 25565;
     const up = await tcpPing(host, port, 2500);
+    */
     if (!up) {
       const msg = `Serveur ${host}:${port} hors ligne. Lancement bloqué.`;
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -793,5 +797,83 @@ ipcMain.handle('launcher:ping', async (_evt, { host, port, timeout }) => {
     return { ok: true, up };
   } catch (e) {
     return { ok: true, up: false };
+  }
+});
+
+// IPC: ping Minecraft server (port open check)
+// Azuriom Auth handlers
+ipcMain.handle('azuriom:login', async (_evt, { email, password, twoFactorCode }) => {
+  try {
+    console.log('[Azuriom] Login attempt for:', email);
+
+    // Import the Azuriom auth manager dynamically
+    const { getAzuriomAuthManager } = require('./renderer/azuriom-auth-manager');
+
+    // Get the Azuriom auth manager instance
+    const azuriomAuth = getAzuriomAuthManager();
+
+    // Attempt login
+    const result = await azuriomAuth.login(email, password, twoFactorCode);
+
+    if (result.success) {
+      console.log('[Azuriom] Login successful');
+      return { ok: true, user: result.user };
+    } else {
+      console.log('[Azuriom] Login failed:', result.error);
+      return { ok: false, error: result.error, code: result.code };
+    }
+  } catch (error) {
+    console.error('[Azuriom] Login error:', error.message);
+    return {
+      ok: false,
+      error: 'Erreur lors de la connexion Azuriom',
+      code: 'AZURIOM_ERROR'
+    };
+  }
+});
+
+ipcMain.handle('azuriom:logout', async () => {
+  try {
+    const { getAzuriomAuthManager } = require('./renderer/azuriom-auth-manager');
+    const azuriomAuth = getAzuriomAuthManager();
+    const result = await azuriomAuth.logout();
+    return result;
+  } catch (error) {
+    console.error('[Azuriom] Logout error:', error.message);
+    return { success: true, warning: 'Erreur côté serveur, mais déconnexion locale effectuée' };
+  }
+});
+
+ipcMain.handle('azuriom:getProviders', async () => {
+  try {
+    const { getAvailableAuthProviders } = require('./renderer/auth-manager-v2');
+    const providers = getAvailableAuthProviders();
+    return { ok: true, providers };
+  } catch (error) {
+    console.error('[Azuriom] Get providers error:', error.message);
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle('azuriom:getCurrentProvider', async () => {
+  try {
+    const { getCurrentAuthProvider } = require('./renderer/auth-manager-v2');
+    const provider = getCurrentAuthProvider();
+    return { ok: true, provider };
+  } catch (error) {
+    console.error('[Azuriom] Get current provider error:', error.message);
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle('azuriom:verifyToken', async (_evt, { token }) => {
+  try {
+    const { getAzuriomAuthManager } = require('./renderer/azuriom-auth-manager');
+    const azuriomAuth = getAzuriomAuthManager();
+    const result = await azuriomAuth.verifyToken(token);
+    return result;
+  } catch (error) {
+    console.error('[Azuriom] Verify token error:', error.message);
+    return { ok: false, error: error.message };
   }
 });

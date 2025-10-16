@@ -69,10 +69,22 @@ contextBridge.exposeInMainWorld('eminium', {
     ipcRenderer.invoke('settings:set', patch)
   ),
   
-  // Maintenance
-  getMaintenance: withLogging('maintenance:get', () => 
-    ipcRenderer.invoke('maintenance:get')
-  )
+  // Azuriom Authentication
+  azuriomLogin: withLogging('azuriom:login', (email, password, twoFactorCode) =>
+    ipcRenderer.invoke('azuriom:login', { email, password, twoFactorCode })
+  ),
+  azuriomLogout: withLogging('azuriom:logout', () =>
+    ipcRenderer.invoke('azuriom:logout')
+  ),
+  getAzuriomProviders: withLogging('azuriom:getProviders', () =>
+    ipcRenderer.invoke('azuriom:getProviders')
+  ),
+  getCurrentAzuriomProvider: withLogging('azuriom:getCurrentProvider', () =>
+    ipcRenderer.invoke('azuriom:getCurrentProvider')
+  ),
+  verifyAzuriomToken: withLogging('azuriom:verifyToken', (token) =>
+    ipcRenderer.invoke('azuriom:verifyToken', { token })
+  ),
 });
 
 // Progress event subscriptions
