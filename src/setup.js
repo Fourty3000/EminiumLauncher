@@ -212,10 +212,108 @@ function resolveJavaPath() {
   } catch (e) {
     try { console.warn('[JRE] resolveJavaPath error:', e?.message || String(e)); } catch {}
   }
-  return undefined;
+// Fonction pour vérifier si Java est installé sur le système
+async function checkSystemJava() {
+  return new Promise((resolve) => {
+    const { spawn } = require('child_process');
+    const javaCheck = spawn('java', ['-version'], {
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let stderr = '';
+    javaCheck.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    javaCheck.on('close', (code) => {
+      if (code === 0 && stderr.includes('java version')) {
+        // Extraire la version de Java
+        const versionMatch = stderr.match(/java version \"([^\"]+)\"/);
+        const version = versionMatch ? versionMatch[1] : 'inconnue';
+        resolve({ installed: true, version, path: 'system' });
+      } else {
+        resolve({ installed: false, error: 'Java non trouvé ou version incompatible' });
+      }
+    });
+
+    javaCheck.on('error', () => {
+      resolve({ installed: false, error: 'Impossible de vérifier Java' });
+    });
+  });
 }
 
-function ensureBaseFolders() {
+// Fonction pour télécharger et installer Java si nécessaire
+async function ensureJavaInstallation(log) {
+  const javaCheck = await checkSystemJava();
+
+  if (javaCheck.installed) {
+    log && log(`Java détecté: version ${javaCheck.version}`);
+    return { success: true, path: 'system' };
+  }
+
+  log && log('Java non détecté sur le système. Téléchargement et installation de Java 17...');
+
+  try {
+    // Créer le dossier pour Java
+    const javaInstallDir = path.join(hiddenBase, 'java');
+    ensureDir(javaInstallDir);
+    log && log('Dossier d\'installation Java créé');
+
+    // URL de téléchargement de Java 17 (Adoptium)
+    const javaUrl = process.platform === 'win32'
+      ? 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.8%2B7/OpenJDK17U-jdk_x64_windows_hotspot_17.0.8_7.zip'
+      : process.platform === 'darwin'
+      ? 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.8%2B7/OpenJDK17U-jdk_x64_mac_hotspot_17.0.8_7.tar.gz'
+      : 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.8%2B7/OpenJDK17U-jdk_x64_linux_hotspot_17.0.8_7.tar.gz';
+
+    const archiveName = path.basename(javaUrl);
+    const archivePath = path.join(hiddenBase, 'cache', archiveName);
+
+    // Télécharger l'archive Java
+    log && log(`Téléchargement de Java depuis ${javaUrl}`);
+    await aSYNC_GET(javaUrl, archivePath);
+    log && log('Téléchargement Java terminé');
+
+    // Extraire l'archive
+    log && log('Extraction de Java...');
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip(archivePath);
+    zip.extractAllTo(javaInstallDir, true);
+    log && log('Extraction Java terminée');
+
+    // Nettoyer l'archive
+    try { fs.unlinkSync(archivePath); } catch (e) { }
+
+    // Trouver le dossier extrait
+    const extractedDirs = fs.readdirSync(javaInstallDir, { withFileTypes: true })
+      .filter(dirent => dirent.isDirectory())
+      .map(dirent => path.join(javaInstallDir, dirent.name));
+
+    if (extractedDirs.length === 0) {
+      throw new Error('Impossible de trouver le dossier Java extrait');
+    }
+
+    const javaHome = extractedDirs[0];
+    const javaBinPath = process.platform === 'win32'
+      ? path.join(javaHome, 'bin', 'javaw.exe')
+      : path.join(javaHome, 'bin', 'java');
+
+    // Vérifier que Java fonctionne
+    const { spawnSync } = require('child_process');
+    log && log('Vérification de Java installé...');
+    const test = spawnSync(javaBinPath, ['-version'], { encoding: 'utf8' });
+    if (test.error || test.status !== 0) {
+      throw new Error(`Java installé ne fonctionne pas: ${test.error?.message || 'Erreur inconnue'}`);
+    }
+
+    log && log(`Java installé avec succès dans ${javaHome}`);
+    return { success: true, path: javaBinPath, home: javaHome };
+
+  } catch (error) {
+    log && log(`Erreur lors de l'installation de Java: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
   // Use global call stack protection
   return CallStackProtection.safeExecute('ensureBaseFolders', () => {
     // Exécuter la migration avant de créer les dossiers
@@ -1333,15 +1431,25 @@ async function launchMinecraft({ memoryMB = 2048, serverHost = 'play.eminium.ovh
     try { fs.unlinkSync(installerPath); } catch {}
     await ensureForgeInstaller(MC_VERSION, FORGE_VERSION);
   }
-  let javaPath = resolveJavaPath();
-  // Enforce bundled JRE so we don't rely on system Java silently
-  if (!javaPath) {
-    throw new Error('JRE embarqué introuvable. Placez une JRE Java 17 dans assets/core/jre/win/bin/javaw.exe (ou mac/linux selon la plateforme).');
+
+  // Installer Java si nécessaire avant de continuer
+  const javaResult = await ensureJavaInstallation(log);
+  if (!javaResult.success) {
+    throw new Error(`Impossible d'installer Java: ${javaResult.error}`);
   }
+
+  let javaPath;
+  if (javaResult.path === 'system') {
+    // Utiliser Java système si détecté
+    javaPath = 'java'; // Le système utilisera PATH
+  } else {
+    // Utiliser Java installé localement
+    javaPath = javaResult.path;
+  }
+
   // Validate Java by running -version; if javaw fails, try sibling java.exe
   const tryCheck = (exePath) => {
     try {
-      const { loginEminium, testServerConnection } = require('./setup.js');
       const res = spawnSync(exePath, ['-version'], { encoding: 'utf8', windowsHide: true });
       // Some Javas print version to stderr; accept exitCode 0
       if (res.error) throw res.error;
@@ -1358,7 +1466,7 @@ async function launchMinecraft({ memoryMB = 2048, serverHost = 'play.eminium.ovh
 
   try {
     // If path points to javaw.exe, prefer java.exe for checks
-    if (process.platform === 'win32' && javaPath.toLowerCase().endsWith('javaw.exe')) {
+    if (process.platform === 'win32' && javaPath.endsWith('javaw.exe')) {
       const alt = path.join(path.dirname(javaPath), 'java.exe');
       if (fs.existsSync(alt)) {
         tryCheck(alt);
@@ -1366,8 +1474,11 @@ async function launchMinecraft({ memoryMB = 2048, serverHost = 'play.eminium.ovh
       } else {
         tryCheck(javaPath);
       }
-    } else {
+    } else if (javaPath !== 'java') {
       tryCheck(javaPath);
+    } else {
+      // Pour Java système, vérifier simplement qu'il existe
+      tryCheck('java');
     }
   } catch (e2) {
     throw new Error(`Java invalide ou non exécutable: ${javaPath}. Détail: ${e2?.message || e2}`);
@@ -1463,8 +1574,20 @@ async function prepareGame(log) {
   } catch {}
   await ensureAll();
   const logger = (msg) => { log && log(msg); };
+
+  // Installer Java si nécessaire
+  const javaResult = await ensureJavaInstallation(logger);
+  if (!javaResult.success) {
+    throw new Error(`Installation Java échouée: ${javaResult.error}`);
+  }
+  logger('Installation Java vérifiée');
+
   await ensureVersionFilesBMCL(MC_VERSION, logger);
+  logger('Fichiers Minecraft téléchargés');
+
   await ensureForgeInstaller(MC_VERSION, FORGE_VERSION);
+  logger('Forge installé');
+  logger('Préparation terminée ! Prêt pour le lancement...');
   return { ok: true };
 }
 
