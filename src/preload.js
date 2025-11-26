@@ -32,10 +32,6 @@ contextBridge.exposeInMainWorld('eminium', {
   getProfile: withLogging('auth:profile:get', () => 
     ipcRenderer.invoke('auth:profile:get')
   ),
-  setProfile: withLogging('auth:profile:set', (profile) =>
-    ipcRenderer.invoke('auth:profile:set', profile)
-  ),
-  // (croissant removed)
   
   // Gestion du launcher
   ensure: withLogging('launcher:ensure', () => 
@@ -69,22 +65,10 @@ contextBridge.exposeInMainWorld('eminium', {
     ipcRenderer.invoke('settings:set', patch)
   ),
   
-  // Azuriom Authentication
-  azuriomLogin: withLogging('azuriom:login', (email, password, twoFactorCode) =>
-    ipcRenderer.invoke('azuriom:login', { email, password, twoFactorCode })
-  ),
-  azuriomLogout: withLogging('azuriom:logout', () =>
-    ipcRenderer.invoke('azuriom:logout')
-  ),
-  getAzuriomProviders: withLogging('azuriom:getProviders', () =>
-    ipcRenderer.invoke('azuriom:getProviders')
-  ),
-  getCurrentAzuriomProvider: withLogging('azuriom:getCurrentProvider', () =>
-    ipcRenderer.invoke('azuriom:getCurrentProvider')
-  ),
-  verifyAzuriomToken: withLogging('azuriom:verifyToken', (token) =>
-    ipcRenderer.invoke('azuriom:verifyToken', { token })
-  ),
+  // Maintenance
+  getMaintenance: withLogging('maintenance:get', () => 
+    ipcRenderer.invoke('maintenance:get')
+  )
 });
 
 // Progress event subscriptions

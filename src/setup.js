@@ -12,27 +12,6 @@ const { app, BrowserWindow } = require('electron');
 
 
 
-// Simple call stack protection for main process
-const CallStackProtection = {
-  safeExecute: function(functionName, fn, ...args) {
-    try {
-      return fn(...args);
-    } catch (error) {
-      console.error(`[CallStackProtection] Error in ${functionName}:`, error);
-      return null;
-    }
-  },
-
-  safeExecuteAsync: async function(functionName, fn, ...args) {
-    try {
-      return await fn(...args);
-    } catch (error) {
-      console.error(`[CallStackProtection] Async error in ${functionName}:`, error);
-      return null;
-    }
-  }
-};
-
 // ── Editable constants
 const MC_VERSION = '1.20.1';
 const FORGE_VERSION = '47.3.0';
@@ -88,44 +67,29 @@ function ensureDir(p) {
 // Migration: déplacer l'ancien contenu de ~/.eminium-core vers ~/.eminium
 function migrateFromOldHiddenBase(log) {
   try {
-    // Note: ensureDir(hiddenBase) will be called by ensureBaseFolders, no need to call it here
+    ensureDir(hiddenBase);
 
     const moveAll = (srcBase, label) => {
       if (!srcBase || srcBase === hiddenBase) return;
       if (!fs.existsSync(srcBase)) return;
-      
-      console.log(`[migrateFromOldHiddenBase] Starting migration from ${label}: ${srcBase}`);
       const entries = fs.readdirSync(srcBase, { withFileTypes: true });
-      
       for (const e of entries) {
         const src = path.join(srcBase, e.name);
         const dst = path.join(hiddenBase, e.name);
-        
         try {
           if (e.isDirectory()) {
-            try { 
-              fs.renameSync(src, dst);
-              console.log(`[migrateFromOldHiddenBase] Renamed directory: ${e.name}`);
-            } catch (renameError) {
-              console.log(`[migrateFromOldHiddenBase] Rename failed, copying directory: ${e.name}`, renameError.message);
+            try { fs.renameSync(src, dst); }
+            catch {
               copyDir(src, dst);
               try { fs.rmSync(src, { recursive: true, force: true }); } catch {}
             }
           } else if (e.isFile()) {
             ensureDir(path.dirname(dst));
-            try { 
-              fs.renameSync(src, dst);
-              console.log(`[migrateFromOldHiddenBase] Renamed file: ${e.name}`);
-            } catch (renameError) {
-              console.log(`[migrateFromOldHiddenBase] Rename failed, copying file: ${e.name}`, renameError.message);
-              try { fs.copyFileSync(src, dst); fs.unlinkSync(src); } catch {}
-            }
+            try { fs.renameSync(src, dst); }
+            catch { try { fs.copyFileSync(src, dst); fs.unlinkSync(src); } catch {} }
           }
-        } catch (error) {
-          console.warn(`[migrateFromOldHiddenBase] Error processing ${e.name}:`, error.message);
-        }
+        } catch {}
       }
-      
       // cleanup if empty
       try { fs.rmdirSync(srcBase); } catch {}
       try { if (globalThis.emitPlayProgress) globalThis.emitPlayProgress({ line: `[Migration] Données déplacées de ${label} vers AppData/.eminium` }); } catch {}
@@ -136,11 +100,7 @@ function migrateFromOldHiddenBase(log) {
     moveAll(OLD_HIDDEN_BASE, '.eminium-core');
     // Migrer depuis l'ancien ~/.eminium (home) si différent d'AppData
     if (OLD_EMINIUM_HOME !== eminiumDir) moveAll(OLD_EMINIUM_HOME, 'home/.eminium');
-    
-    console.log('[migrateFromOldHiddenBase] Migration completed');
-  } catch (error) {
-    console.warn('[migrateFromOldHiddenBase] Error during migration:', error.message);
-  }
+  } catch {}
 }
 
 // Fallback: récupérer l'URL du JSON de version via le manifest
@@ -212,123 +172,16 @@ function resolveJavaPath() {
   } catch (e) {
     try { console.warn('[JRE] resolveJavaPath error:', e?.message || String(e)); } catch {}
   }
-// Fonction pour vérifier si Java est installé sur le système
-async function checkSystemJava() {
-  return new Promise((resolve) => {
-    const { spawn } = require('child_process');
-    const javaCheck = spawn('java', ['-version'], {
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-
-    let stderr = '';
-    javaCheck.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    javaCheck.on('close', (code) => {
-      if (code === 0 && stderr.includes('java version')) {
-        // Extraire la version de Java
-        const versionMatch = stderr.match(/java version \"([^\"]+)\"/);
-        const version = versionMatch ? versionMatch[1] : 'inconnue';
-        resolve({ installed: true, version, path: 'system' });
-      } else {
-        resolve({ installed: false, error: 'Java non trouvé ou version incompatible' });
-      }
-    });
-
-    javaCheck.on('error', () => {
-      resolve({ installed: false, error: 'Impossible de vérifier Java' });
-    });
-  });
+  return undefined;
 }
 
-// Fonction pour télécharger et installer Java si nécessaire
-async function ensureJavaInstallation(log) {
-  const javaCheck = await checkSystemJava();
-
-  if (javaCheck.installed) {
-    log && log(`Java détecté: version ${javaCheck.version}`);
-    return { success: true, path: 'system' };
-  }
-
-  log && log('Java non détecté sur le système. Téléchargement et installation de Java 17...');
-
-  try {
-    // Créer le dossier pour Java
-    const javaInstallDir = path.join(hiddenBase, 'java');
-    ensureDir(javaInstallDir);
-    log && log('Dossier d\'installation Java créé');
-
-    // URL de téléchargement de Java 17 (Adoptium)
-    const javaUrl = process.platform === 'win32'
-      ? 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.8%2B7/OpenJDK17U-jdk_x64_windows_hotspot_17.0.8_7.zip'
-      : process.platform === 'darwin'
-      ? 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.8%2B7/OpenJDK17U-jdk_x64_mac_hotspot_17.0.8_7.tar.gz'
-      : 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.8%2B7/OpenJDK17U-jdk_x64_linux_hotspot_17.0.8_7.tar.gz';
-
-    const archiveName = path.basename(javaUrl);
-    const archivePath = path.join(hiddenBase, 'cache', archiveName);
-
-    // Télécharger l'archive Java
-    log && log(`Téléchargement de Java depuis ${javaUrl}`);
-    await aSYNC_GET(javaUrl, archivePath);
-    log && log('Téléchargement Java terminé');
-
-    // Extraire l'archive
-    log && log('Extraction de Java...');
-    const AdmZip = require('adm-zip');
-    const zip = new AdmZip(archivePath);
-    zip.extractAllTo(javaInstallDir, true);
-    log && log('Extraction Java terminée');
-
-    // Nettoyer l'archive
-    try { fs.unlinkSync(archivePath); } catch (e) { }
-
-    // Trouver le dossier extrait
-    const extractedDirs = fs.readdirSync(javaInstallDir, { withFileTypes: true })
-      .filter(dirent => dirent.isDirectory())
-      .map(dirent => path.join(javaInstallDir, dirent.name));
-
-    if (extractedDirs.length === 0) {
-      throw new Error('Impossible de trouver le dossier Java extrait');
-    }
-
-    const javaHome = extractedDirs[0];
-    const javaBinPath = process.platform === 'win32'
-      ? path.join(javaHome, 'bin', 'javaw.exe')
-      : path.join(javaHome, 'bin', 'java');
-
-    // Vérifier que Java fonctionne
-    const { spawnSync } = require('child_process');
-    log && log('Vérification de Java installé...');
-    const test = spawnSync(javaBinPath, ['-version'], { encoding: 'utf8' });
-    if (test.error || test.status !== 0) {
-      throw new Error(`Java installé ne fonctionne pas: ${test.error?.message || 'Erreur inconnue'}`);
-    }
-
-    log && log(`Java installé avec succès dans ${javaHome}`);
-    return { success: true, path: javaBinPath, home: javaHome };
-
-  } catch (error) {
-    log && log(`Erreur lors de l'installation de Java: ${error.message}`);
-    return { success: false, error: error.message };
-  }
-}
-  // Use global call stack protection
-  return CallStackProtection.safeExecute('ensureBaseFolders', () => {
-    // Exécuter la migration avant de créer les dossiers
-    try { migrateFromOldHiddenBase(); } catch {}
-
-    // Créer tous les dossiers nécessaires (éviter les doublons)
-    const uniqueDirs = new Set([
-      ...Object.values(dirs),
-      eminiumDir,
-      jreRoot
-    ]);
-
-    uniqueDirs.forEach(ensureDir);
-    setHiddenWindows(hiddenBase);
-  });
+function ensureBaseFolders() {
+  // Exécuter la migration avant de créer les dossiers
+  try { migrateFromOldHiddenBase(); } catch {}
+  Object.values(dirs).forEach(ensureDir);
+  ensureDir(eminiumDir);
+  ensureDir(jreRoot);
+  setHiddenWindows(hiddenBase);
 }
 
 function ensureUserOptions() {
@@ -356,101 +209,24 @@ function ensureMirrorsFile() {
 }
 
 async function importBundledModpackIfAny() {
-  // Use global call stack protection
-  return await CallStackProtection.safeExecuteAsync('importBundledModpackIfAny', async () => {
-    try {
-      if (!fs.existsSync(bundledModpack)) return;
-
-      console.log('[importBundledModpackIfAny] Starting bundled modpack import...');
-      const zip = new AdmZip(bundledModpack);
-
-      // Extract to a temporary directory first to avoid potential conflicts
-      const tempExtractDir = path.join(hiddenBase, 'temp_extract_' + Date.now());
-      try {
-        ensureDir(tempExtractDir);
-        zip.extractAllTo(tempExtractDir, true);
-
-        // Now copy from temp to final destination using our safe copyDir function
-        const entries = fs.readdirSync(tempExtractDir, { withFileTypes: true });
-        for (const entry of entries) {
-          const src = path.join(tempExtractDir, entry.name);
-          const dst = path.join(hiddenBase, entry.name);
-
-          if (entry.isDirectory()) {
-            copyDir(src, dst);
-          } else if (entry.isFile()) {
-            ensureDir(path.dirname(dst));
-            fs.copyFileSync(src, dst);
-          }
-        }
-
-        console.log('[importBundledModpackIfAny] Bundled modpack import completed');
-      } catch (error) {
-        console.warn('[importBundledModpackIfAny] Error during import:', error.message);
-      } finally {
-        // Clean up temporary directory
-        try {
-          if (fs.existsSync(tempExtractDir)) {
-            fs.rmSync(tempExtractDir, { recursive: true, force: true });
-          }
-        } catch (cleanupError) {
-          console.warn('[importBundledModpackIfAny] Error cleaning up temp directory:', cleanupError.message);
-        }
-      }
-    } catch (error) {
-      console.warn('[importBundledModpackIfAny] Error in importBundledModpackIfAny:', error.message);
-    }
-  });
+  if (fs.existsSync(bundledModpack)) {
+    const zip = new AdmZip(bundledModpack);
+    zip.extractAllTo(hiddenBase, true);
+  }
 }
 
 // Utilitaire: copier récursivement (overwrite)
 function copyDir(src, dst) {
-  // Use global call stack protection
-  return CallStackProtection.safeExecute('copyDir', () => {
-    // Normalize paths to prevent issues with different path formats
-    const normalizedSrc = path.normalize(src);
-    const normalizedDst = path.normalize(dst);
-
-    // Prevent copying a directory into itself or its parent
-    if (normalizedSrc === normalizedDst || normalizedDst.startsWith(normalizedSrc + path.sep)) {
-      console.warn(`[copyDir] Skipping recursive copy: ${src} -> ${dst}`);
-      return;
+  ensureDir(dst);
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, entry.name);
+    const d = path.join(dst, entry.name);
+    if (entry.isDirectory()) copyDir(s, d);
+    else if (entry.isFile()) {
+      ensureDir(path.dirname(d));
+      fs.copyFileSync(s, d);
     }
-
-    // Prevent infinite recursion by tracking processed paths
-    if (!globalThis._copyDirProcessedPaths) {
-      globalThis._copyDirProcessedPaths = new Set();
-    }
-
-    const pathKey = `${normalizedSrc}->${normalizedDst}`;
-    if (globalThis._copyDirProcessedPaths.has(pathKey)) {
-      console.warn(`[copyDir] Skipping already processed path: ${src} -> ${dst}`);
-      return;
-    }
-
-    globalThis._copyDirProcessedPaths.add(pathKey);
-
-    try {
-      ensureDir(dst);
-      const entries = fs.readdirSync(src, { withFileTypes: true });
-      for (const entry of entries) {
-        const s = path.join(src, entry.name);
-        const d = path.join(dst, entry.name);
-
-        if (entry.isDirectory()) {
-          copyDir(s, d);
-        } else if (entry.isFile()) {
-          ensureDir(path.dirname(d));
-          fs.copyFileSync(s, d);
-        }
-      }
-    } catch (error) {
-      console.warn(`[copyDir] Error copying ${src} -> ${dst}:`, error.message);
-    } finally {
-      // Clean up the processed path tracking for this specific copy operation
-      globalThis._copyDirProcessedPaths.delete(pathKey);
-    }
-  });
+  }
 }
 
 // Synchroniser le modpack depuis un ZIP distant
@@ -1106,29 +882,14 @@ async function fetchWithFallback(urls, dest, label='resource', validateJar=false
 
 
 async function ensureAll() {
-  // Use global call stack protection
-  return await CallStackProtection.safeExecuteAsync('ensureAll', async () => {
-    // Prevent recursive calls
-    if (globalThis._ensureAllInProgress) {
-      console.warn('[ensureAll] Already in progress, skipping recursive call');
-      return { ok: true, paths: { hiddenBase, eminiumDir } };
-    }
-
-    globalThis._ensureAllInProgress = true;
-
-    try {
-      await ensureBaseFolders();
-      await ensureUserOptions();
-      ensureMirrorsFile();
-      await importBundledModpackIfAny();
-      return {
-        ok: true,
-        paths: { hiddenBase, eminiumDir }
-      };
-    } finally {
-      globalThis._ensureAllInProgress = false;
-    }
-  });
+  await ensureBaseFolders();
+  await ensureUserOptions();
+  ensureMirrorsFile();
+  await importBundledModpackIfAny();
+  return {
+    ok: true,
+    paths: { hiddenBase, eminiumDir }
+  };
 }
 
 // Test de connexion au serveur
@@ -1391,7 +1152,7 @@ async function loginEminium(email, password, twoFactorCode) {
 
 const { Client, Authenticator } = require('minecraft-launcher-core');
 
-async function launchMinecraft({ memoryMB = 2048, serverHost = '82.64.85.47', serverPort = 25565 } = {}) {
+async function launchMinecraft({ memoryMB = 2048, serverHost = 'play.eminium.ovh', serverPort = 25565 } = {}) {
 
   const profile = readUserProfile();
   if (!profile) {
@@ -1431,25 +1192,15 @@ async function launchMinecraft({ memoryMB = 2048, serverHost = '82.64.85.47', se
     try { fs.unlinkSync(installerPath); } catch {}
     await ensureForgeInstaller(MC_VERSION, FORGE_VERSION);
   }
-
-  // Installer Java si nécessaire avant de continuer
-  const javaResult = await ensureJavaInstallation(log);
-  if (!javaResult.success) {
-    throw new Error(`Impossible d'installer Java: ${javaResult.error}`);
+  let javaPath = resolveJavaPath();
+  // Enforce bundled JRE so we don't rely on system Java silently
+  if (!javaPath) {
+    throw new Error('JRE embarqué introuvable. Placez une JRE Java 17 dans assets/core/jre/win/bin/javaw.exe (ou mac/linux selon la plateforme).');
   }
-
-  let javaPath;
-  if (javaResult.path === 'system') {
-    // Utiliser Java système si détecté
-    javaPath = 'java'; // Le système utilisera PATH
-  } else {
-    // Utiliser Java installé localement
-    javaPath = javaResult.path;
-  }
-
   // Validate Java by running -version; if javaw fails, try sibling java.exe
   const tryCheck = (exePath) => {
     try {
+      const { loginEminium, testServerConnection } = require('./setup.js');
       const res = spawnSync(exePath, ['-version'], { encoding: 'utf8', windowsHide: true });
       // Some Javas print version to stderr; accept exitCode 0
       if (res.error) throw res.error;
@@ -1466,7 +1217,7 @@ async function launchMinecraft({ memoryMB = 2048, serverHost = '82.64.85.47', se
 
   try {
     // If path points to javaw.exe, prefer java.exe for checks
-    if (process.platform === 'win32' && javaPath.endsWith('javaw.exe')) {
+    if (process.platform === 'win32' && javaPath.toLowerCase().endsWith('javaw.exe')) {
       const alt = path.join(path.dirname(javaPath), 'java.exe');
       if (fs.existsSync(alt)) {
         tryCheck(alt);
@@ -1474,11 +1225,8 @@ async function launchMinecraft({ memoryMB = 2048, serverHost = '82.64.85.47', se
       } else {
         tryCheck(javaPath);
       }
-    } else if (javaPath !== 'java') {
-      tryCheck(javaPath);
     } else {
-      // Pour Java système, vérifier simplement qu'il existe
-      tryCheck('java');
+      tryCheck(javaPath);
     }
   } catch (e2) {
     throw new Error(`Java invalide ou non exécutable: ${javaPath}. Détail: ${e2?.message || e2}`);
@@ -1574,39 +1322,13 @@ async function prepareGame(log) {
   } catch {}
   await ensureAll();
   const logger = (msg) => { log && log(msg); };
-
-  // Installer Java si nécessaire
-  const javaResult = await ensureJavaInstallation(logger);
-  if (!javaResult.success) {
-    throw new Error(`Installation Java échouée: ${javaResult.error}`);
-  }
-  logger('Installation Java vérifiée');
-
   await ensureVersionFilesBMCL(MC_VERSION, logger);
-  logger('Fichiers Minecraft téléchargés');
-
   await ensureForgeInstaller(MC_VERSION, FORGE_VERSION);
-  logger('Forge installé');
-  logger('Préparation terminée ! Prêt pour le lancement...');
   return { ok: true };
 }
 
 module.exports.checkReady = checkReady;
 module.exports.prepareGame = prepareGame;
-// Persist a user profile coming from an external auth flow
-module.exports.setUserProfile = function setUserProfile(profile) {
-  try {
-    const p = Object.assign({}, profile || {});
-    if (!p || typeof p !== 'object') throw new Error('invalid_profile');
-    // Ensure uuid (derive from name if missing)
-    if (!p.uuid && p.name) {
-      p.uuid = uuidFromName(String(p.name));
-    }
-    p.obtainedAt = new Date().toISOString();
-    writeUserProfile(p);
-    return { ok: true };
-  } catch (e) { return { ok: false, error: e?.message || String(e) }; }
-};
 
 // Parcours récursif des JARs pour supprimer ceux corrompus
 async function cleanupCorruptLibraries() {

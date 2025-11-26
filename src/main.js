@@ -1,17 +1,16 @@
 // Load .env early
 try { require('dotenv').config({ path: require('path').join(__dirname, '.env') }); } catch { }
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-// (croissant removed: http, crypto)
 
 const AdmZip = require('adm-zip');
 let DiscordRPC;
 try { DiscordRPC = require('discord-rpc'); } catch { }
 const axios = require('axios');
 const net = require('net');
-const { ensureAll, launchMinecraft, readUserProfile, logoutEminium, checkReady, prepareGame, setUserProfile } = require('./setup');
+const { ensureAll, launchMinecraft, readUserProfile, logoutEminium, checkReady, prepareGame } = require('./setup');
 
 let mainWindow;
 let windowIcon; // nativeImage pour l'icône
@@ -137,30 +136,9 @@ function setPresencePlaying() {
   } catch { }
 }
 
-const { loginEminium } = require('./setup');
-// Auth handlers with improved timeout and error handling
+const { loginEminium } = require('./setup.js');
 ipcMain.handle('auth:login', async (_evt, { email, password, code }) => {
-  try {
-    console.log('[Auth] Login attempt for:', email);
-
-    // Add timeout protection
-    const loginPromise = loginEminium(email, password, code);
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Login timeout after 15 seconds')), 15000);
-    });
-
-    const result = await Promise.race([loginPromise, timeoutPromise]);
-    console.log('[Auth] Login result:', result?.status || 'unknown');
-
-    return result;
-  } catch (error) {
-    console.error('[Auth] Login error:', error.message);
-    return {
-      status: 'error',
-      reason: 'network',
-      message: 'Impossible de se connecter au serveur. Veuillez vérifier votre connexion internet.'
-    };
-  }
+  return await loginEminium(email, password, code);
 });
 
 // (payments notifications removed)
@@ -432,10 +410,6 @@ ipcMain.handle('settings:set', async (_evt, patch) => {
 });
 
 // Endpoint de maintenance désactivé
-ipcMain.handle('maintenance:get', async () => {
-  // Maintenance est toujours désactivée
-  return { ok: true, maintenance: false };
-});
 
 // Status handler used by renderer to know readiness / rpc state
 ipcMain.handle('launcher:status', async () => {
@@ -475,19 +449,25 @@ ipcMain.handle('auth:profile:get', async () => {
 ipcMain.handle('auth:logout', async () => {
   return logoutEminium();
 });
-
-// Permettre de définir un profil (depuis un flux externe, p.ex. Croissant script)
-ipcMain.handle('auth:profile:set', async (_evt, profile) => {
+ipcMain.handle('launcher:ensure', async () => {
   try {
-    const res = setUserProfile(profile || {});
-    if (!res || res.ok !== true) return { ok: false, error: res?.error || 'write_failed' };
-    const saved = readUserProfile();
-    return { ok: true, profile: saved };
+    try { setPresencePreparing(); } catch { }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('ensure:progress', { phase: 'start', message: 'Préparation en cours...' });
+    }
+    const res = await ensureAll();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('ensure:progress', { phase: 'done', message: 'Préparation terminée.' });
+    }
+    try { setPresenceIdle(); } catch { }
+    return res;
   } catch (e) {
-    return { ok: false, error: e?.message || String(e) };
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('ensure:progress', { phase: 'error', message: e?.message || String(e) });
+    }
+    throw e;
   }
 });
-
 
 ipcMain.handle('updater:check', async (_evt, payload) => {
   try {
@@ -671,14 +651,10 @@ ipcMain.handle('launcher:play', async (_evt, userOpts) => {
 
     // (VPN/proxy reminder removed)
 
-    // Désactiver temporairement la vérification de serveur pour éviter les erreurs réseau
-    const up = true; // Simuler serveur en ligne
-    /*
     // Enforce server availability before launching
     const host = (userOpts && userOpts.serverHost) ? String(userOpts.serverHost) : 'play.eminium.ovh';
     const port = (userOpts && userOpts.serverPort) ? Number(userOpts.serverPort) : 25565;
     const up = await tcpPing(host, port, 2500);
-    */
     if (!up) {
       const msg = `Serveur ${host}:${port} hors ligne. Lancement bloqué.`;
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -779,16 +755,6 @@ function tcpPing(host, port, timeout = 3000) {
   });
 }
 
-// IPC: ensure all required files are downloaded and prepared
-ipcMain.handle('launcher:ensure', async () => {
-  try {
-    await ensureAll();
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e?.message || String(e) };
-  }
-});
-
 // IPC: ping Minecraft server (port open check)
 ipcMain.handle('launcher:ping', async (_evt, { host, port, timeout }) => {
   try {
@@ -797,83 +763,5 @@ ipcMain.handle('launcher:ping', async (_evt, { host, port, timeout }) => {
     return { ok: true, up };
   } catch (e) {
     return { ok: true, up: false };
-  }
-});
-
-// IPC: ping Minecraft server (port open check)
-// Azuriom Auth handlers
-ipcMain.handle('azuriom:login', async (_evt, { email, password, twoFactorCode }) => {
-  try {
-    console.log('[Azuriom] Login attempt for:', email);
-
-    // Import the Azuriom auth manager dynamically
-    const { getAzuriomAuthManager } = require('./renderer/azuriom-auth-manager');
-
-    // Get the Azuriom auth manager instance
-    const azuriomAuth = getAzuriomAuthManager();
-
-    // Attempt login
-    const result = await azuriomAuth.login(email, password, twoFactorCode);
-
-    if (result.success) {
-      console.log('[Azuriom] Login successful');
-      return { ok: true, user: result.user };
-    } else {
-      console.log('[Azuriom] Login failed:', result.error);
-      return { ok: false, error: result.error, code: result.code };
-    }
-  } catch (error) {
-    console.error('[Azuriom] Login error:', error.message);
-    return {
-      ok: false,
-      error: 'Erreur lors de la connexion Azuriom',
-      code: 'AZURIOM_ERROR'
-    };
-  }
-});
-
-ipcMain.handle('azuriom:logout', async () => {
-  try {
-    const { getAzuriomAuthManager } = require('./renderer/azuriom-auth-manager');
-    const azuriomAuth = getAzuriomAuthManager();
-    const result = await azuriomAuth.logout();
-    return result;
-  } catch (error) {
-    console.error('[Azuriom] Logout error:', error.message);
-    return { success: true, warning: 'Erreur côté serveur, mais déconnexion locale effectuée' };
-  }
-});
-
-ipcMain.handle('azuriom:getProviders', async () => {
-  try {
-    const { getAvailableAuthProviders } = require('./renderer/auth-manager-v2');
-    const providers = getAvailableAuthProviders();
-    return { ok: true, providers };
-  } catch (error) {
-    console.error('[Azuriom] Get providers error:', error.message);
-    return { ok: false, error: error.message };
-  }
-});
-
-ipcMain.handle('azuriom:getCurrentProvider', async () => {
-  try {
-    const { getCurrentAuthProvider } = require('./renderer/auth-manager-v2');
-    const provider = getCurrentAuthProvider();
-    return { ok: true, provider };
-  } catch (error) {
-    console.error('[Azuriom] Get current provider error:', error.message);
-    return { ok: false, error: error.message };
-  }
-});
-
-ipcMain.handle('azuriom:verifyToken', async (_evt, { token }) => {
-  try {
-    const { getAzuriomAuthManager } = require('./renderer/azuriom-auth-manager');
-    const azuriomAuth = getAzuriomAuthManager();
-    const result = await azuriomAuth.verifyToken(token);
-    return result;
-  } catch (error) {
-    console.error('[Azuriom] Verify token error:', error.message);
-    return { ok: false, error: error.message };
   }
 });
